@@ -1,0 +1,21 @@
+load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
+
+bzl_library(
+    name = "bazel_env",
+    srcs = ["bazel_env.bzl"],
+    visibility = ["//visibility:public"],
+    deps = ["@bazel_skylib//rules:write_file"],
+)
+
+exports_files(
+    ["bazel_env.bzl"],
+    visibility = ["//docs:__pkg__"],
+)
+
+exports_files(
+    [
+        "status.sh.tpl",
+        "launcher.sh.tpl",
+    ],
+    visibility = ["//visibility:private"],
+)

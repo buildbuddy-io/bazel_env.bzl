@@ -1,0 +1,39 @@
+load("@bazel_skylib//rules:diff_test.bzl", "diff_test")
+load("@rules_proto//proto:proto_lang_toolchain.bzl", "proto_lang_toolchain")
+load("@stardoc//stardoc:stardoc.bzl", "stardoc")
+
+stardoc(
+    name = "bazel_env",
+    out = "bazel_env.md",
+    input = "//:bazel_env.bzl",
+    deps = ["//:bazel_env"],
+)
+
+diff_test(
+    name = "bazel_env_test",
+    failure_message = "Please run:\n    bazel run //docs:update",
+    file1 = "bazel_env.md",
+    file2 = "//docs-gen:bazel_env.md",
+)
+
+sh_binary(
+    name = "update",
+    srcs = ["update.sh"],
+    data = [
+        ":bazel_env",
+    ],
+)
+
+# Precompiled proto toolchain for stardoc
+proto_lang_toolchain(
+    name = "protoc_java_toolchain",
+    command_line = "--java_out=$(OUT)",
+    progress_message = "Generating java_proto_library %{label}",
+    runtime = "@protobuf_java//jar",
+)
+
+toolchain(
+    name = "protoc_java_toolchain.registration",
+    toolchain = ":protoc_java_toolchain",
+    toolchain_type = "@rules_java//java/proto:toolchain_type",
+)

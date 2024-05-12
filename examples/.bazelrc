@@ -1,0 +1,10 @@
+common --tool_java_runtime_version=remotejdk_17
+common --test_output=errors
+
+# These settings make it harder for bazel_env to do its job and are here to
+# verify it still works.
+common --incompatible_disallow_empty_glob
+common --incompatible_strict_action_env
+common --nolegacy_external_runfiles
+common --nobuild_runfile_links
+common --noincompatible_enable_cc_toolchain_resolution

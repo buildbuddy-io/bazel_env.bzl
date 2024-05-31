@@ -285,6 +285,9 @@ def _bazel_env_rule_impl(ctx):
         is_executable = True,
         substitutions = {
             "{{name}}": ctx.label.name,
+            # We assume that the target is in the main repo and want the label to look like this:
+            # //:bazel_env
+            "{{label}}": str(ctx.label).removeprefix("@@"),
             "{{bin_dir}}": unique_name_tool.dirname,
             "{{unique_name_tool}}": unique_name_tool.basename,
             "{{has_tools}}": str(bool(tool_infos)),

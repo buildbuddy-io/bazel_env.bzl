@@ -269,13 +269,13 @@ def _bazel_env_rule_impl(ctx):
     )
 
     tool_infos = [tool[_ToolInfo] for tool in ctx.attr.tool_targets]
-    tool_name_pad = max([len(tool_info.name) for tool_info in tool_infos])
+    tool_name_pad = max([len(tool_info.name) for tool_info in tool_infos] + [0])
 
     toolchain_infos = [struct(
         name = toolchain.label.name.rpartition("/")[-1],
         path = toolchain[DefaultInfo].files.to_list()[0].path,
     ) for toolchain in ctx.attr.toolchain_targets]
-    toolchain_name_pad = max([len(toolchain_info.name) for toolchain_info in toolchain_infos])
+    toolchain_name_pad = max([len(toolchain_info.name) for toolchain_info in toolchain_infos] + [0])
 
     status_script = ctx.actions.declare_file(ctx.label.name + ".sh")
     tool_regex = "\\|".join([tool_info.name for tool_info in tool_infos] + [unique_name_tool.basename])

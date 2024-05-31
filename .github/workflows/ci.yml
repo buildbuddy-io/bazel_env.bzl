@@ -50,7 +50,7 @@ jobs:
           USE_BAZEL_VERSION: ${{ matrix.bazel }}
         working-directory: ./examples
         # Build first because the tests rely on convenience symlinks.
-        run: bazelisk build //:bazel_env && bazelisk test //...
+        run: bazelisk build //... && bazelisk test //...
 
       - name: Upload test logs
         if: always()

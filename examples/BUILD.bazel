@@ -48,3 +48,7 @@ sh_test(
         "local",
     ],
 )
+
+bazel_env(
+    name = "empty_env",
+)

@@ -51,8 +51,8 @@ BUILD_WORKSPACE_DIRECTORY="$build_workspace_directory" \
 expected_output='
 ====== bazel_env ======
 
-✔ direnv is installed
-✔ direnv added bazel-out/bazel_env-opt/bin/bazel_env/bin to PATH
+✅ direnv is installed
+✅ direnv added bazel-out/bazel_env-opt/bin/bazel_env/bin to PATH
 
 Tools available in PATH:
   * bazel-cc:   $(CC)

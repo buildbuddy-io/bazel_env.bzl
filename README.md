@@ -20,7 +20,7 @@ The [example](examples/) includes some commonly used tools and toolchains.
 bazel_dep(name = "bazel_env.bzl", dev_dependency = True)
 git_override(
     module_name = "bazel_env.bzl",
-    remote = "https://github.com/fmeum/bazel_env.bzl.git",
+    remote = "https://github.com/buildbuddy-io/bazel_env.bzl.git",
     commit = "<latest commit>",
 )
 ```

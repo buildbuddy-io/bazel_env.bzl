@@ -13,10 +13,10 @@ PREFIX="bazel_env.bzl-${TAG:1}"
 ARCHIVE="bazel_env.bzl-$TAG.tar.gz"
 git archive --prefix=${PREFIX}/ ${TAG} -o $ARCHIVE
 
-cat << 'EOF'
-Add to your `MODULE.bazel` file:
+cat << EOF
+Add to your \`MODULE.bazel\` file:
 
-```starlark
+\`\`\`starlark
 bazel_dep(name = "bazel_env.bzl", version = "${TAG:1}")
-```
+\`\`\`
 EOF

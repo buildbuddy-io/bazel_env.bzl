@@ -17,12 +17,7 @@ The [example](examples/) includes some commonly used tools and toolchains.
 1. Add a dependency on `bazel_env.bzl` to your `MODULE.bazel` file:
 
 ```starlark
-bazel_dep(name = "bazel_env.bzl", dev_dependency = True)
-git_override(
-    module_name = "bazel_env.bzl",
-    remote = "https://github.com/buildbuddy-io/bazel_env.bzl.git",
-    commit = "<latest commit>",
-)
+bazel_dep(name = "bazel_env.bzl", version = "0.1.0", dev_dependency = True)
 ```
 
 2. Add a `bazel_env` target to a `BUILD.bazel` file (e.g. top-level or in a `tools` directory):
@@ -48,16 +43,24 @@ bazel_env(
 
 3. Run the `bazel_env` target and follow the instructions to install `direnv` and set up the `.envrc` file:
 
-```shell
+```
 $ bazel run //:bazel_env
 ====== bazel_env ======
 
-✔ direnv is installed
-⚠️ bazel_env's bin directory is not in PATH. Please add the following snippet to a .envrc file next to your MODULE.bazel file:
+✅ direnv is installed
+❌ bazel_env's bin directory is not in PATH. Please follow these steps:
 
-    PATH_add bazel-out/bazel_env-opt/bin/bazel_env/bin
+1. Enable direnv's shell hook as described in https://direnv.net/docs/hook.html.
 
-Then allowlist it with 'direnv allow .envrc'.
+2. Add the following snippet to a .envrc file next to your MODULE.bazel file:
+
+watch_file bazel-out/bazel_env-opt/bin/bazel_env/bin
+PATH_add bazel-out/bazel_env-opt/bin/bazel_env/bin
+if [[ ! -d bazel-out/bazel_env-opt/bin/bazel_env/bin ]]; then
+  log_error "ERROR[bazel_env.bzl]: Run 'bazel run //:bazel_env' to regenerate bazel-out/bazel_env-opt/bin/bazel_env/bin"
+fi
+
+3. Allowlist the file with 'direnv allow .envrc'.
 ```
 
 Multiple `bazel_env` targets can be added per project.
@@ -67,25 +70,33 @@ Note that each target will eagerly fetch and build all tools and toolchains when
 
 1. Run the `bazel_env` target and follow the instructions to install `direnv` and allowlist the `.envrc` file:
 
-```shell
+```
 $ bazel run //:bazel_env
 ====== bazel_env ======
 
-✔ direnv is installed
-⚠️ bazel_env's bin directory is not in PATH. Please add the following snippet to a .envrc file next to your MODULE.bazel file:
+✅ direnv is installed
+❌ bazel_env's bin directory is not in PATH. Please follow these steps:
 
-    PATH_add bazel-out/bazel_env-opt/bin/bazel_env/bin
+1. Enable direnv's shell hook as described in https://direnv.net/docs/hook.html.
 
-Then allowlist it with 'direnv allow .envrc'.
+2. Add the following snippet to a .envrc file next to your MODULE.bazel file:
+
+watch_file bazel-out/bazel_env-opt/bin/bazel_env/bin
+PATH_add bazel-out/bazel_env-opt/bin/bazel_env/bin
+if [[ ! -d bazel-out/bazel_env-opt/bin/bazel_env/bin ]]; then
+  log_error "ERROR[bazel_env.bzl]: Run 'bazel run //:bazel_env' to regenerate bazel-out/bazel_env-opt/bin/bazel_env/bin"
+fi
+
+3. Allowlist the file with 'direnv allow .envrc'.
 ```
 
 2. Run the target again to get a list of all tools and toolchains:
 
-```shell
+```
 ====== bazel_env ======
 
-✔ direnv is installed
-✔ direnv added bazel-out/bazel_env-opt/bin/bazel_env/bin to PATH
+✅ direnv is installed
+✅ direnv added bazel-out/bazel_env-opt/bin/bazel_env/bin to PATH
 
 Tools available in PATH:
   * buildifier: @buildifier_prebuilt//:buildifier

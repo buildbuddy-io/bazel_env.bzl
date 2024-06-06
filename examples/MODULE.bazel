@@ -13,12 +13,19 @@ bazel_dep(name = "buildifier_prebuilt", version = "6.4.0")
 bazel_dep(name = "buildozer", version = "7.1.2")
 bazel_dep(name = "rules_go", version = "0.47.1")
 bazel_dep(name = "rules_java", version = "7.5.0")
+bazel_dep(name = "rules_python", version = "0.32.2")
 bazel_dep(name = "platforms", version = "0.0.10")
 
 # Don't update the versions below, they are only used to verify the hermeticity of bazel_env.
 
 go_sdk = use_extension("@rules_go//go:extensions.bzl", "go_sdk")
 go_sdk.download(version = "1.20.14")
+
+python = use_extension("@rules_python//python/extensions:python.bzl", "python")
+python.toolchain(
+    is_default = True,
+    python_version = "3.11.8",
+)
 
 http_file = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_file")
 

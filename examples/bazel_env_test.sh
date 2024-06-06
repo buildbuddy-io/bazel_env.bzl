@@ -9,9 +9,10 @@ build_workspace_directory="$(dirname "$(readlink -f MODULE.bazel)")"
 function assert_cmd_output() {
   local -r cmd="$1"
   local -r expected_output="$2"
+  local -r extra_path="${3:-}"
 
   local -r bazel_env="$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/bin"
-  local -r actual_output="$(PATH="$bazel_env:/bin" $cmd 2>&1 | head -n 1 || true)"
+  local -r actual_output="$(PATH="$bazel_env:/bin$extra_path" $cmd 2>&1 | head -n 1 || true)"
 
   # Allow for wildcard matching first.
   if [[ $actual_output == $expected_output ]]; then
@@ -55,17 +56,20 @@ expected_output='
 ✅ direnv added bazel-out/bazel_env-opt/bin/bazel_env/bin to PATH
 
 Tools available in PATH:
-  * bazel-cc:   $(CC)
-  * buildifier: @buildifier_prebuilt//:buildifier
-  * buildozer:  @@buildozer~~buildozer_binary~buildozer_binary//:buildozer.exe
-  * go:         @rules_go//go
-  * jar:        $(JAVABASE)/bin/jar
-  * java:       $(JAVA)
-  * jq:         :jq
+  * bazel-cc:    $(CC)
+  * buildifier:  @buildifier_prebuilt//:buildifier
+  * buildozer:   @@buildozer~~buildozer_binary~buildozer_binary//:buildozer.exe
+  * go:          @rules_go//go
+  * jar:         $(JAVABASE)/bin/jar
+  * java:        $(JAVA)
+  * jq:          :jq
+  * python:      $(PYTHON3)
+  * python_tool: :python_tool
 
 Toolchains available at stable relative paths:
   * cc_toolchain: bazel-out/bazel_env-opt/bin/bazel_env/toolchains/cc_toolchain
-  * jdk:          bazel-out/bazel_env-opt/bin/bazel_env/toolchains/jdk'
+  * jdk:          bazel-out/bazel_env-opt/bin/bazel_env/toolchains/jdk
+  * python:       bazel-out/bazel_env-opt/bin/bazel_env/toolchains/python'
 
 diff <(echo "$expected_output") <(echo "$status_out") || exit 1
 
@@ -82,8 +86,12 @@ assert_cmd_output "go version" "go version go1.20.14 $(uname|tr '[:upper:]' '[:l
 assert_cmd_output "jar --version" "jar 17.0.8.1"
 assert_cmd_output "java --version" "openjdk 17.0.8.1 2023-08-24 LTS"
 assert_cmd_output "jq --version" "jq-1.5"
+assert_cmd_output "python --version" "Python 3.11.8"
+# Bazel's Python launcher requires a system installation of python3.
+assert_cmd_output "python_tool" "python_tool version 0.0.1" ":$(dirname "$(which python3)")"
 
 #### Toolchains ####
 
 [[ -d "$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/toolchains/cc_toolchain" ]]
 assert_cmd_output "$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/toolchains/jdk/bin/java --version" "openjdk 17.0.8.1 2023-08-24 LTS"
+assert_cmd_output "$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/toolchains/python/bin/python3 --version" "Python 3.11.8"

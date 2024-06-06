@@ -176,7 +176,7 @@ _tool = rule(
     implementation = _tool_impl,
     attrs = {
         "target": attr.label(
-            allow_single_file = True,
+            allow_files = True,
             cfg = _flip_output_dir,
             executable = True,
         ),

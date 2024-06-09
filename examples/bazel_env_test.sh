@@ -8,17 +8,38 @@ build_workspace_directory="$(dirname "$(readlink -f MODULE.bazel)")"
 # output, possibly with wildcards.
 function assert_cmd_output() {
   local -r cmd="$1"
-  local -r expected_output="$2"
+  local -r expected_first_line="$2"
   local -r extra_path="${3:-}"
+  local -r no_bazel_check="${4:-}"
 
   local -r bazel_env="$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/bin"
-  local -r actual_output="$(PATH="$bazel_env:/bin:/usr/bin$extra_path" $cmd 2>&1 | head -n 1 || true)"
+  local -r fake_bazel_marker_file=$(mktemp)
+  # The env var is no longer defined when the trap runs, so expand it early.
+  # shellcheck disable=SC2064
+  trap "rm '$fake_bazel_marker_file'" EXIT
+  if ! full_output="$( \
+      FAKE_BAZEL_MARKER_FILE="$fake_bazel_marker_file" \
+      BAZEL=./fake_bazel.sh \
+      PATH="$bazel_env:/bin:/usr/bin$extra_path" \
+      $cmd 2>&1)"; then
+    echo "Command $cmd failed:"
+    echo "$full_output"
+    exit 1
+  fi
+  if [[ $# -ne 4 || "$no_bazel_check" != "no_bazel_check" ]]; then
+    [[ "$(cat "$fake_bazel_marker_file")" == "1" ]] || {
+      echo "Expected to run Bazel with $1, but didn't."
+      exit 1
+    }
+  fi
 
-  # Allow for wildcard matching first.
-  if [[ $actual_output == $expected_output ]]; then
+  local -r actual_first_line="$(echo "$full_output" | head -n 1)"
+  # Allow for wildcard matching and print a diff if the output doesn't match.
+  # shellcheck disable=SC2053
+  if [[ $actual_first_line == $expected_first_line ]]; then
     return
   fi
-  diff <(echo "$expected_output") <(echo "$actual_output") || exit 1
+  diff <(echo "$expected_first_line") <(echo "$actual_first_line") || exit 1
 }
 
 function assert_contains() {
@@ -75,7 +96,7 @@ diff <(echo "$expected_output") <(echo "$status_out") || exit 1
 
 #### Tools ####
 
-assert_cmd_output "bazel-cc" "* error: no input files"
+assert_cmd_output "bazel-cc --version" "@(*gcc*|*clang*)"
 assert_cmd_output "buildifier --version" "buildifier version: 6.4.0 "
 assert_cmd_output "buildozer --version" "buildozer version: 7.1.2 "
 case "$(arch)" in
@@ -90,8 +111,17 @@ assert_cmd_output "python --version" "Python 3.11.8"
 # Bazel's Python launcher requires a system installation of python3.
 assert_cmd_output "python_tool" "python_tool version 0.0.1" ":$(dirname "$(which python3)")"
 
+# Verify that a failing Bazel invocation doesn't prevent the tool from running.
+python_ran=$(mktemp)
+rm "$python_ran"
+FAKE_BAZEL_EXIT_CODE=1 assert_cmd_output "python -c open(\"${python_ran}\",\"w+\")" "WARNING[bazel_env.bzl]: Failed to keep 'python' up-to-date with 'bazel build //:bazel_env':" ":$(dirname "$(which python3)")"
+[[ -f "$python_ran" ]] || {
+  echo "Expected python to run despite Bazel failing"
+  exit 1
+}
+
 #### Toolchains ####
 
 [[ -d "$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/toolchains/cc_toolchain" ]]
-assert_cmd_output "$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/toolchains/jdk/bin/java --version" "openjdk 17.0.8.1 2023-08-24 LTS"
-assert_cmd_output "$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/toolchains/python/bin/python3 --version" "Python 3.11.8"
+assert_cmd_output "$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/toolchains/jdk/bin/java --version" "openjdk 17.0.8.1 2023-08-24 LTS" "" "no_bazel_check"
+assert_cmd_output "$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/toolchains/python/bin/python3 --version" "Python 3.11.8" "" "no_bazel_check"

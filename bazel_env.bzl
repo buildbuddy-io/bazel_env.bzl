@@ -160,6 +160,7 @@ def _tool_impl(ctx):
         substitutions = {
             "{{bazel_env_label}}": str(ctx.label).removeprefix("@@").removesuffix("/bin/" + name),
             "{{rlocation_path}}": rlocation_path,
+            "{{update_when_run}}": ctx.attr.update_when_run,
         },
     )
 
@@ -187,6 +188,9 @@ _tool = rule(
         "toolchain_targets": attr.label_list(
             cfg = _flip_output_dir,
             allow_files = True,
+        ),
+        "update_when_run": attr.string(
+            values = ["auto", "yes", "no"],
         ),
         "_launcher": attr.label(
             allow_single_file = True,
@@ -339,7 +343,7 @@ _bazel_env_rule = rule(
 
 _FORBIDDEN_TOOL_NAMES = ["direnv", "bazel", "bazelisk"]
 
-def bazel_env(*, name, tools = {}, toolchains = {}, **kwargs):
+def bazel_env(*, name, tools = {}, toolchains = {}, update_when_run = "auto", **kwargs):
     # type: (string, dict[string, string | Label], dict[string, string | Label]) -> None
     """Makes Bazel-managed tools and toolchains available under stable paths.
 
@@ -368,6 +372,20 @@ def bazel_env(*, name, tools = {}, toolchains = {}, **kwargs):
         toolchains: A dictionary mapping toolchain names to their targets. The name is used as the
             basename of the toolchain directory in the `toolchains` directory. The directory is
             a symlink to the repository root of the (single) repository containing the toolchain.
+
+        update_when_run: Whether to always update the tools via `bazel build` before running them.
+            This is a trade-off between performance (startup latency of a tool) and correctness.
+            The supported values are:
+            <ul>
+            <li>"auto" (default): Always try to update the tool, but skip the update with a warning if
+              it would result in excessive latency (e.g. because there is a concurrent Bazel
+              invocation).
+            <li>"yes": Always try to update the tool and fail with an error if it would result in
+              excessive latency.
+            <li>"no": Use the tool in the state of the last build of the `bazel_env` target. This is
+              the fastest option as it never invokes Bazel, but it may run the an old version of a
+              tool if the `bazel_env` target or the tool itself has changed since the last build.
+            </ul>
 
         **kwargs: Additional arguments to pass to the main `bazel_env` target. It is usually not
             necessary to provide any and the target should have private visibility.
@@ -429,6 +447,7 @@ def bazel_env(*, name, tools = {}, toolchains = {}, **kwargs):
             name = tool_target_name,
             raw_tool = str(tool),
             toolchain_targets = reversed_toolchains,
+            update_when_run = update_when_run,
             visibility = ["//visibility:private"],
             tags = ["manual"],
             **tool_kwargs

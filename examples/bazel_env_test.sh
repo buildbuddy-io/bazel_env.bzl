@@ -12,7 +12,7 @@ function assert_cmd_output() {
   local -r extra_path="${3:-}"
 
   local -r bazel_env="$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/bin"
-  local -r actual_output="$(PATH="$bazel_env:/bin$extra_path" $cmd 2>&1 | head -n 1 || true)"
+  local -r actual_output="$(PATH="$bazel_env:/bin:/usr/bin$extra_path" $cmd 2>&1 | head -n 1 || true)"
 
   # Allow for wildcard matching first.
   if [[ $actual_output == $expected_output ]]; then

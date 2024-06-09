@@ -21,15 +21,23 @@ _bazel__get_workspace_path() {
   echo "$workspace"
 }
 
-# Simulate a 'bazel run' environment. Since tools may cd into
 case "${BASH_SOURCE[0]}" in
   /*) own_path="${BASH_SOURCE[0]}" ;;
   *) own_path="$PWD/${BASH_SOURCE[0]}" ;;
 esac
-export RUNFILES_DIR="${own_path}.runfiles"
+own_dir="$(dirname "$own_path")"
+own_name="$(basename "$own_path")"
+if ! grep -q -F "$own_name" "$own_dir/_all_tools.txt"; then
+  echo "ERROR: $own_name has been removed from bazel_env, run 'bazel run {{bazel_env_label}}' to remove it from PATH." >&2
+  exit 1
+fi
 
 # Set up an environment similar to 'bazel run' to support tools designed to be
 # run with it.
+# Since tools may cd into BUILD_WORKSPACE_DIRECTORY, ensure that RUNFILES_DIR
+# is absolute.
+export RUNFILES_DIR="${own_path}.runfiles"
+
 BUILD_WORKING_DIRECTORY="$(pwd)"
 export BUILD_WORKING_DIRECTORY
 

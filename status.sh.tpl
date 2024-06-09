@@ -50,7 +50,7 @@ done
 
 if [[ $cleaned == 1 ]]; then
 cat << 'EOF'
-✔ Cleaned up stale tools
+✅ Cleaned up stale tools
 EOF
 fi
 

@@ -1,6 +1,7 @@
 load("@buildozer//:buildozer.bzl", "BUILDOZER_LABEL")
 load("@bazel_env.bzl", "bazel_env")
 load("@rules_python//python:py_binary.bzl", "py_binary")
+load(":test_helpers.bzl", "REPO_NAME_SEPARATOR")
 
 # `bazel run //:bazel_env` prints a summary and setup steps.
 bazel_env(
@@ -58,7 +59,12 @@ sh_test(
         "MODULE.bazel",
         # Enforces that the bazel_env has been built.
         ":bazel_env",
+        # Replaces "bazel" in the test script.
+        "fake_bazel.sh",
     ],
+    env = {
+        "BAZEL_REPO_NAME_SEPARATOR": REPO_NAME_SEPARATOR,
+    },
     tags = [
         # The test only depends on the bazel_env fake outputs, not the individual tools.
         "external",

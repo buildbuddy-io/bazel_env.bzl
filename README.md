@@ -110,7 +110,8 @@ Toolchains available at stable relative paths:
 
 ## Usage
 
-Running the `bazel_env` target updates the tools and toolchains when necessary. In fact, building the target is sufficient, but doesn't clean up tools that were removed from the rule.
+Build the `bazel_env` target to keep the tools and toolchains up-to-date with the Bazel build.
+The target can also be executed with `bazel run` to print the list of tools and toolchains as well as clean up removed tools.
 
 ## Documentation
 

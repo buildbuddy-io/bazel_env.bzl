@@ -127,6 +127,7 @@ _ToolInfo = provider(fields = ["name", "raw_tool"])
 
 def _tool_impl(ctx):
     # type: (ctx) -> list[Provider]
+    name = ctx.label.name.rpartition("/")[-1]
     out = ctx.actions.declare_file(ctx.label.name)
 
     if ctx.attr.path:
@@ -157,6 +158,7 @@ def _tool_impl(ctx):
         output = out,
         is_executable = True,
         substitutions = {
+            "{{bazel_env_label}}": str(ctx.label).removeprefix("@@").removesuffix("/bin/" + name),
             "{{rlocation_path}}": rlocation_path,
         },
     )
@@ -167,7 +169,7 @@ def _tool_impl(ctx):
             runfiles = runfiles,
         ),
         _ToolInfo(
-            name = ctx.label.name.rpartition("/")[-1],
+            name = name,
             raw_tool = ctx.attr.raw_tool,
         ),
     ]
@@ -249,7 +251,7 @@ def _bazel_env_rule_impl(ctx):
     # It is not necessary to stage the toolchain files (which are in runfiles) as inputs as their
     # repos have already been fetched before the toolchain rules were analyzed.
     transitive_inputs = [toolchain[DefaultInfo].files for toolchain in ctx.attr.toolchain_targets]
-    direct_inputs = [unique_name_tool]
+    direct_inputs = [unique_name_tool, ctx.file.all_tools_file]
     tools = [tool[DefaultInfo].files_to_run for tool in ctx.attr.tool_targets]
     ctx.actions.run_shell(
         outputs = [implicit_out],
@@ -278,7 +280,7 @@ def _bazel_env_rule_impl(ctx):
     toolchain_name_pad = max([len(toolchain_info.name) for toolchain_info in toolchain_infos] + [0])
 
     status_script = ctx.actions.declare_file(ctx.label.name + ".sh")
-    tool_regex = "\\|".join([tool_info.name for tool_info in tool_infos] + [unique_name_tool.basename])
+    tool_regex = "\\|".join([tool_info.name for tool_info in tool_infos] + [unique_name_tool.basename, ctx.file.all_tools_file.basename])
     ctx.actions.expand_template(
         template = ctx.file._status,
         output = status_script,
@@ -319,6 +321,7 @@ _bazel_env_rule = rule(
     cfg = _flip_output_dir,
     implementation = _bazel_env_rule_impl,
     attrs = {
+        "all_tools_file": attr.label(allow_single_file = True),
         "unique_name_tool": attr.label(),
         "tool_targets": attr.label_list(
             providers = [_ToolInfo],
@@ -395,6 +398,16 @@ def bazel_env(*, name, tools = {}, toolchains = {}, **kwargs):
         visibility = ["//visibility:private"],
         tags = ["manual"],
     )
+    all_tools_file = name + "/bin/_all_tools"
+    write_file(
+        name = all_tools_file,
+        out = all_tools_file + ".txt",
+        # List all tools in a format that is easy to grep.
+        content = [" " + " ".join(tools.keys()) + " "],
+        is_executable = False,
+        visibility = ["//visibility:private"],
+        tags = ["manual"],
+    )
 
     for tool_name, tool in tools.items():
         if not tool_name:
@@ -435,6 +448,7 @@ def bazel_env(*, name, tools = {}, toolchains = {}, **kwargs):
 
     _bazel_env_rule(
         name = name,
+        all_tools_file = all_tools_file,
         unique_name_tool = unique_name_tool,
         tool_targets = tool_targets,
         toolchain_targets = toolchain_targets,

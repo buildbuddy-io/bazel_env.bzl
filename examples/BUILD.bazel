@@ -55,6 +55,8 @@ sh_test(
         "MODULE.bazel",
         # Enforces that the bazel_env has been built.
         ":bazel_env",
+        # Replaces "bazel" in the test script.
+        "fake_bazel.sh",
     ],
     tags = [
         # The test only depends on the bazel_env fake outputs, not the individual tools.

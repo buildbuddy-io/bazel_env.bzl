@@ -7,7 +7,7 @@
 ## bazel_env
 
 <pre>
-bazel_env(<a href="#bazel_env-name">name</a>, <a href="#bazel_env-tools">tools</a>, <a href="#bazel_env-toolchains">toolchains</a>, <a href="#bazel_env-kwargs">kwargs</a>)
+bazel_env(<a href="#bazel_env-name">name</a>, <a href="#bazel_env-tools">tools</a>, <a href="#bazel_env-toolchains">toolchains</a>, <a href="#bazel_env-update_when_run">update_when_run</a>, <a href="#bazel_env-kwargs">kwargs</a>)
 </pre>
 
 Makes Bazel-managed tools and toolchains available under stable paths.
@@ -31,6 +31,7 @@ well as cleans up stale tools.
 | <a id="bazel_env-name"></a>name |  The name of the rule.   |  none |
 | <a id="bazel_env-tools"></a>tools |  A dictionary mapping tool names to their targets or paths. The name is used as the basename of the tool in the `bin` directory and will be available on `PATH`.<br><br>If a target is provided, the corresponding executable is staged in the `bin` directory together with its runfiles.<br><br>If a path is provided, Make variables provided by `toolchains` are expanded in it and all the files of referenced toolchains are staged as runfiles.   |  `{}` |
 | <a id="bazel_env-toolchains"></a>toolchains |  A dictionary mapping toolchain names to their targets. The name is used as the basename of the toolchain directory in the `toolchains` directory. The directory is a symlink to the repository root of the (single) repository containing the toolchain.   |  `{}` |
+| <a id="bazel_env-update_when_run"></a>update_when_run |  Whether to always update the tools via `bazel build` before running them. This is a trade-off between performance (startup latency of a tool) and correctness. The supported values are: <ul> <li>"auto" (default): Always try to update the tool, but skip the update with a warning if   it would result in excessive latency (e.g. because there is a concurrent Bazel   invocation). <li>"yes": Always try to update the tool and fail with an error if it would result in   excessive latency. <li>"no": Use the tool in the state of the last build of the `bazel_env` target. This is   the fastest option as it never invokes Bazel, but it may run the an old version of a   tool if the `bazel_env` target or the tool itself has changed since the last build. </ul>   |  `"auto"` |
 | <a id="bazel_env-kwargs"></a>kwargs |  Additional arguments to pass to the main `bazel_env` target. It is usually not necessary to provide any and the target should have private visibility.   |  none |
 
 

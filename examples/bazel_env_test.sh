@@ -12,9 +12,10 @@ function assert_cmd_output() {
   local -r extra_path="${3:-}"
 
   local -r bazel_env="$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/bin"
-  local -r actual_output="$(PATH="$bazel_env:/bin:/usr/bin$extra_path" $cmd 2>&1 | head -n 1 || true)"
+  local -r actual_output="$(env -u TEST_SRCDIR -u RUNFILES_DIR -u RUNFILES_MANIFEST_FILE -- PATH="$bazel_env:/bin:/usr/bin$extra_path" $cmd 2>&1 | head -n 1 || true)"
 
   # Allow for wildcard matching first.
+  # shellcheck disable=SC2053
   if [[ $actual_output == $expected_output ]]; then
     return
   fi
@@ -49,6 +50,7 @@ BUILD_WORKSPACE_DIRECTORY="$build_workspace_directory" \
     exit 1
   }
 
+# shellcheck disable=SC2016
 expected_output='
 ====== bazel_env ======
 
@@ -63,13 +65,16 @@ Tools available in PATH:
   * jar:         $(JAVABASE)/bin/jar
   * java:        $(JAVA)
   * jq:          :jq
+  * node:        $(NODE_PATH)
+  * pnpm:        @pnpm
   * python:      $(PYTHON3)
   * python_tool: :python_tool
 
 Toolchains available at stable relative paths:
   * cc_toolchain: bazel-out/bazel_env-opt/bin/bazel_env/toolchains/cc_toolchain
   * jdk:          bazel-out/bazel_env-opt/bin/bazel_env/toolchains/jdk
-  * python:       bazel-out/bazel_env-opt/bin/bazel_env/toolchains/python'
+  * python:       bazel-out/bazel_env-opt/bin/bazel_env/toolchains/python
+  * nodejs:       bazel-out/bazel_env-opt/bin/bazel_env/toolchains/nodejs'
 
 diff <(echo "$expected_output") <(echo "$status_out") || exit 1
 
@@ -86,6 +91,8 @@ assert_cmd_output "go version" "go version go1.20.14 $(uname|tr '[:upper:]' '[:l
 assert_cmd_output "jar --version" "jar 17.0.8.1"
 assert_cmd_output "java --version" "openjdk 17.0.8.1 2023-08-24 LTS"
 assert_cmd_output "jq --version" "jq-1.5"
+assert_cmd_output "node --version" "v16.18.1"
+assert_cmd_output "pnpm --version" "8.6.7"
 assert_cmd_output "python --version" "Python 3.11.8"
 # Bazel's Python launcher requires a system installation of python3.
 assert_cmd_output "python_tool" "python_tool version 0.0.1" ":$(dirname "$(which python3)")"

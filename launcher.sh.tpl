@@ -37,6 +37,13 @@ fi
 # Since tools may cd into BUILD_WORKSPACE_DIRECTORY, ensure that RUNFILES_DIR
 # is absolute.
 export RUNFILES_DIR="${own_path}.runfiles"
+# Also set legacy RUNFILES variables for compatibility with runfiles logic that
+# predates the runfiles library (e.g. in rules_js).
+export RUNFILES="${RUNFILES_DIR}"
+export JAVA_RUNFILES="${RUNFILES_DIR}"
+export PYTHON_RUNFILES="${RUNFILES_DIR}"
+# Let rules_js' js_binary work by not having it try to cd into BINDIR.
+export JS_BINARY__NO_CD_BINDIR=1
 
 BUILD_WORKING_DIRECTORY="$(pwd)"
 export BUILD_WORKING_DIRECTORY

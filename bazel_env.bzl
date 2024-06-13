@@ -203,13 +203,24 @@ def _toolchain_impl(ctx):
     toolchain_name = ctx.label.name.rpartition("/")[-1]
 
     repos = {file.owner.workspace_root: None for file in ctx.files.target}
+    target = ctx.attr.target[0]
     if not repos:
-        fail("toolchain target '{}' for '{}' has no files".format(ctx.label), toolchain_name)
+        suffix = ""
+        if target.label.name == "toolchain_type":
+            suffix = ". 'toolchain_type' targets are not supported here, look for a 'current_*_{runtime,toolchain}' target instead."
+        fail(
+            "toolchain target",
+            target.label,
+            "for '{}' has no files{}".format(toolchain_name, suffix),
+        )
     if len(repos) > 1:
         fail(
-            "toolchain target '{}' for '{}' has files from different repositories: {}".format(ctx.label),
-            toolchain_name,
-            ", ".join(repos.keys()),
+            "toolchain target",
+            target.label,
+            "for '{}' has files from different repositories: {}".format(
+                toolchain_name,
+                ", ".join(repos.keys()),
+            ),
         )
     single_repo = repos.keys()[0]
 

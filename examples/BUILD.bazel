@@ -9,6 +9,7 @@ bazel_env(
         "cc_toolchain": "@bazel_tools//tools/cpp:current_cc_toolchain",
         "jdk": "@rules_java//toolchains:current_host_java_runtime",
         "python": "@rules_python//python:current_py_toolchain",
+        "nodejs": "@nodejs_toolchains//:resolved_toolchain",
     },
     tools = {
         # Tool paths can reference the Make variables provided by toolchains.
@@ -20,6 +21,8 @@ bazel_env(
         "jar": "$(JAVABASE)/bin/jar",
         "java": "$(JAVA)",
         "jq": ":jq",
+        "node": "$(NODE_PATH)",
+        "pnpm": "@pnpm",
         "python": "$(PYTHON3)",
         "python_tool": ":python_tool",
     },

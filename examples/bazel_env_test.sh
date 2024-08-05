@@ -8,18 +8,35 @@ build_workspace_directory="$(dirname "$(readlink -f MODULE.bazel)")"
 # output, possibly with wildcards.
 function assert_cmd_output() {
   local -r cmd="$1"
-  local -r expected_output="$2"
+  local -r expected_first_line="$2"
   local -r extra_path="${3:-}"
+  local -r no_bazel_check="${4:-}"
 
   local -r bazel_env="$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/bin"
-  local -r actual_output="$(env -u TEST_SRCDIR -u RUNFILES_DIR -u RUNFILES_MANIFEST_FILE -- PATH="$bazel_env:/bin:/usr/bin$extra_path" $cmd 2>&1 | head -n 1 || true)"
+  local -r fake_bazel_marker_file=$(mktemp)
+  # The env var is no longer defined when the trap runs, so expand it early.
+  # shellcheck disable=SC2064
+  trap "rm '$fake_bazel_marker_file'" EXIT
+  if ! full_output="$(env \
+      -u TEST_SRCDIR \
+      -u RUNFILES_DIR \
+      -u RUNFILES_MANIFEST_FILE \
+      FAKE_BAZEL_MARKER_FILE="$fake_bazel_marker_file" \
+      BAZEL=./fake_bazel.sh \
+      PATH="$bazel_env:/bin:/usr/bin$extra_path" \
+      $cmd 2>&1)"; then
+    echo "Command $cmd failed:"
+    echo "$full_output"
+    exit 1
+  fi
 
-  # Allow for wildcard matching first.
+  local -r actual_first_line="$(echo "$full_output" | head -n 1)"
+  # Allow for wildcard matching and print a diff if the output doesn't match.
   # shellcheck disable=SC2053
-  if [[ $actual_output == $expected_output ]]; then
+  if [[ $actual_first_line == $expected_first_line ]]; then
     return
   fi
-  diff <(echo "$expected_output") <(echo "$actual_output") || exit 1
+  diff <(echo "$expected_first_line") <(echo "$actual_first_line") || exit 1
 }
 
 function assert_contains() {
@@ -51,36 +68,40 @@ BUILD_WORKSPACE_DIRECTORY="$build_workspace_directory" \
   }
 
 # shellcheck disable=SC2016
-expected_output='
+function expected_output {
+  local -r sep="$1"
+  printf '%s' "
 ====== bazel_env ======
 
 ✅ direnv is installed
 ✅ direnv added bazel-out/bazel_env-opt/bin/bazel_env/bin to PATH
 
 Tools available in PATH:
-  * bazel-cc:    $(CC)
+  * bazel-cc:    \$(CC)
   * buildifier:  @buildifier_prebuilt//:buildifier
-  * buildozer:   @@buildozer~~buildozer_binary~buildozer_binary//:buildozer.exe
+  * buildozer:   @@buildozer${sep}${sep}buildozer_binary${sep}buildozer_binary//:buildozer.exe
   * go:          @rules_go//go
-  * jar:         $(JAVABASE)/bin/jar
-  * java:        $(JAVA)
+  * jar:         \$(JAVABASE)/bin/jar
+  * java:        \$(JAVA)
   * jq:          :jq
-  * node:        $(NODE_PATH)
+  * node:        \$(NODE_PATH)
   * pnpm:        @pnpm
-  * python:      $(PYTHON3)
+  * python:      \$(PYTHON3)
   * python_tool: :python_tool
 
 Toolchains available at stable relative paths:
   * cc_toolchain: bazel-out/bazel_env-opt/bin/bazel_env/toolchains/cc_toolchain
   * jdk:          bazel-out/bazel_env-opt/bin/bazel_env/toolchains/jdk
   * python:       bazel-out/bazel_env-opt/bin/bazel_env/toolchains/python
-  * nodejs:       bazel-out/bazel_env-opt/bin/bazel_env/toolchains/nodejs'
+  * nodejs:       bazel-out/bazel_env-opt/bin/bazel_env/toolchains/nodejs
+"
+}
 
-diff <(echo "$expected_output") <(echo "$status_out") || exit 1
+diff <(expected_output "$BAZEL_REPO_NAME_SEPARATOR") <(echo "$status_out") || exit 1
 
 #### Tools ####
 
-assert_cmd_output "bazel-cc" "* error: no input files"
+assert_cmd_output "bazel-cc --version" "@(*gcc*|*clang*)"
 assert_cmd_output "buildifier --version" "buildifier version: 6.4.0 "
 assert_cmd_output "buildozer --version" "buildozer version: 7.1.2 "
 case "$(arch)" in

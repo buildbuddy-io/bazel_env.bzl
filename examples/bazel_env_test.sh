@@ -88,12 +88,17 @@ Tools available in PATH:
   * pnpm:        @pnpm
   * python:      \$(PYTHON3)
   * python_tool: :python_tool
+  * cargo:       \$(CARGO)
+  * rustfmt:     \$(RUSTFMT)
+  * rustc:       \$(RUSTC)
+  * rustdoc:     \$(RUSTDOC)
 
 Toolchains available at stable relative paths:
   * cc_toolchain: bazel-out/bazel_env-opt/bin/bazel_env/toolchains/cc_toolchain
   * jdk:          bazel-out/bazel_env-opt/bin/bazel_env/toolchains/jdk
   * python:       bazel-out/bazel_env-opt/bin/bazel_env/toolchains/python
   * nodejs:       bazel-out/bazel_env-opt/bin/bazel_env/toolchains/nodejs
+  * rust:         bazel-out/bazel_env-opt/bin/bazel_env/toolchains/rust
 "
 }
 

@@ -9,10 +9,11 @@ def _rlocation_path(ctx, file):
 
 def _heuristic_rlocation_path(ctx, path):
     # type: (ctx, string) -> string
+    if path.startswith("bazel-out/"):
+        path = path[path.find("external/"):]
+
     if path.startswith("external/"):
         return path.removeprefix("external/")
-    elif path.startswith("bazel-out/"):
-        return path[path.find("external/") + len("external/"):]
     elif path.startswith("../"):
         return path[3:]
     elif path.startswith("/"):

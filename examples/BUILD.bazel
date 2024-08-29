@@ -1,6 +1,6 @@
 load("@buildozer//:buildozer.bzl", "BUILDOZER_LABEL")
-load("@bazel_env.bzl", "bazel_env")
 load("@rules_python//python:py_binary.bzl", "py_binary")
+load("@bazel_env.bzl", "bazel_env")
 load(":test_helpers.bzl", "REPO_NAME_SEPARATOR")
 
 # `bazel run //:bazel_env` prints a summary and setup steps.
@@ -11,6 +11,7 @@ bazel_env(
         "jdk": "@rules_java//toolchains:current_host_java_runtime",
         "python": "@rules_python//python:current_py_toolchain",
         "nodejs": "@nodejs_toolchains//:resolved_toolchain",
+        "rust": "@rules_rust//rust/toolchain:current_rust_toolchain",
     },
     tools = {
         # Tool paths can reference the Make variables provided by toolchains.
@@ -26,6 +27,10 @@ bazel_env(
         "pnpm": "@pnpm",
         "python": "$(PYTHON3)",
         "python_tool": ":python_tool",
+        "cargo": "$(CARGO)",
+        "rustfmt": "$(RUSTFMT)",
+        "rustc": "$(RUSTC)",
+        "rustdoc": "$(RUSTDOC)",
     },
 )
 

@@ -9,6 +9,10 @@ def _rlocation_path(ctx, file):
 
 def _heuristic_rlocation_path(ctx, path):
     # type: (ctx, string) -> string
+    if path.startswith("bazel-out/"):
+        # Skip over bazel-out/<cfg>/bin.
+        path = "/".join(path.split("/")[3:])
+
     if path.startswith("external/"):
         return path.removeprefix("external/")
     elif path.startswith("../"):

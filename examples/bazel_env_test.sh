@@ -124,7 +124,7 @@ assert_cmd_output "python --version" "Python 3.11.8"
 assert_cmd_output "python_tool" "python_tool version 0.0.1" ":$(dirname "$(which python3)")"
 assert_cmd_output "cargo --version" "cargo 1.80.0 (376290515 2024-07-16)"
 assert_cmd_output "rustc --version" "rustc 1.80.0 (051478957 2024-07-21)"
-assert_cmd_output "rustfmt --version" "rustfmt 1.7.0-stable (05147895 2024-07-21)"
+assert_cmd_output "rustfmt --version" "rustfmt 1.7.0-stable (0514789* 2024-07-21)"
 assert_cmd_output "rustdoc --version" "rustdoc 1.80.0 (051478957 2024-07-21)"
 
 #### Toolchains ####

@@ -217,7 +217,7 @@ def _toolchain_impl(ctx):
             target.label,
             "for '{}' has no files{}".format(toolchain_name, suffix),
         )
-    if len(repos) > 1:
+    if len(repos) > 1 and "toolchains_llvm" not in repos.keys()[0]:
         fail(
             "toolchain target",
             target.label,

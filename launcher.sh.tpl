@@ -44,6 +44,8 @@ export JAVA_RUNFILES="${RUNFILES_DIR}"
 export PYTHON_RUNFILES="${RUNFILES_DIR}"
 # Let rules_js' js_binary work by not having it try to cd into BINDIR.
 export JS_BINARY__NO_CD_BINDIR=1
+# Environment of the executable target.
+{{extra_env}}
 
 BUILD_WORKING_DIRECTORY="$(pwd)"
 export BUILD_WORKING_DIRECTORY

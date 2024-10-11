@@ -134,6 +134,7 @@ def _tool_impl(ctx):
     name = ctx.label.name.rpartition("/")[-1]
     out = ctx.actions.declare_file(ctx.label.name)
 
+    extra_env = {}
     if ctx.attr.path:
         vars = {
             k: v
@@ -152,10 +153,16 @@ def _tool_impl(ctx):
                         transitive_files.append(toolchain[DefaultInfo].files)
         runfiles = ctx.runfiles(transitive_files = depset(transitive = transitive_files))
     else:
+        # There is only ever a single target, the attribute only takes an array value because of the transition.
+        target = ctx.attr.target[0]
+
         rlocation_path = _rlocation_path(ctx, ctx.executable.target)
 
         runfiles = ctx.runfiles(ctx.files.target)
-        runfiles = runfiles.merge(ctx.attr.target[0][DefaultInfo].default_runfiles)
+        runfiles = runfiles.merge(target[DefaultInfo].default_runfiles)
+
+        if RunEnvironmentInfo in target:
+            extra_env = target[RunEnvironmentInfo].environment
 
     ctx.actions.expand_template(
         template = ctx.file._launcher,
@@ -164,6 +171,10 @@ def _tool_impl(ctx):
         substitutions = {
             "{{bazel_env_label}}": str(ctx.label).removeprefix("@@").removesuffix("/bin/" + name),
             "{{rlocation_path}}": rlocation_path,
+            "{{extra_env}}": "\n".join([
+                "export {}={}".format(k, repr(v))
+                for k, v in extra_env.items()
+            ]),
         },
     )
 

@@ -9,7 +9,7 @@
 <pre>
 load("@bazel_env.bzl", "bazel_env")
 
-bazel_env(<a href="#bazel_env-name">name</a>, <a href="#bazel_env-tools">tools</a>, <a href="#bazel_env-toolchains">toolchains</a>, <a href="#bazel_env-kwargs">kwargs</a>)
+bazel_env(*, <a href="#bazel_env-name">name</a>, <a href="#bazel_env-tools">tools</a>, <a href="#bazel_env-toolchains">toolchains</a>, <a href="#bazel_env-kwargs">**kwargs</a>)
 </pre>
 
 Makes Bazel-managed tools and toolchains available under stable paths.

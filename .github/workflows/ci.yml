@@ -37,7 +37,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        bazel: [7.x, 8.0.0rc2, last_green]
+        bazel: [7.x, 8.x, last_green]
         os: [ubuntu-latest, macos-13, macos-latest]
     env:
       BAZELISK_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

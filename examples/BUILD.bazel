@@ -1,4 +1,5 @@
 load("@buildozer//:buildozer.bzl", "BUILDOZER_LABEL")
+load("@multitool//:tools.bzl", MULTITOOL_TOOLS = "TOOLS")
 load("@rules_python//python:py_binary.bzl", "py_binary")
 load("@bazel_env.bzl", "bazel_env")
 load(":test_helpers.bzl", "REPO_NAME_SEPARATOR")
@@ -31,7 +32,7 @@ bazel_env(
         "rustfmt": "$(RUSTFMT)",
         "rustc": "$(RUSTC)",
         "rustdoc": "$(RUSTDOC)",
-    },
+    } | MULTITOOL_TOOLS,
 )
 
 alias(

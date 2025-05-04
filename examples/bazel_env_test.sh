@@ -93,21 +93,26 @@ function expected_output {
 ✅ direnv added bazel-out/bazel_env-opt/bin/bazel_env/bin to PATH
 
 Tools available in PATH:
-  * bazel-cc:    \$(CC)
-  * buildifier:  @buildifier_prebuilt//:buildifier
-  * buildozer:   @@buildozer${sep}${sep}buildozer_binary${sep}buildozer_binary//:buildozer.exe
-  * go:          @rules_go//go
-  * jar:         \$(JAVABASE)/bin/jar
-  * java:        \$(JAVA)
-  * jq:          :jq
-  * node:        \$(NODE_PATH)
-  * pnpm:        @pnpm
-  * python:      \$(PYTHON3)
-  * python_tool: :python_tool
-  * cargo:       \$(CARGO)
-  * rustfmt:     \$(RUSTFMT)
-  * rustc:       \$(RUSTC)
-  * rustdoc:     \$(RUSTDOC)
+  * bazel-cc:       \$(CC)
+  * buildifier:     @buildifier_prebuilt//:buildifier
+  * buildozer:      @@buildozer${sep}${sep}buildozer_binary${sep}buildozer_binary//:buildozer.exe
+  * go:             @rules_go//go
+  * jar:            \$(JAVABASE)/bin/jar
+  * java:           \$(JAVA)
+  * jq:             :jq
+  * node:           \$(NODE_PATH)
+  * pnpm:           @pnpm
+  * python:         \$(PYTHON3)
+  * python_tool:    :python_tool
+  * cargo:          \$(CARGO)
+  * rustfmt:        \$(RUSTFMT)
+  * rustc:          \$(RUSTC)
+  * rustdoc:        \$(RUSTDOC)
+  * buf:            @@rules_multitool++multitool+multitool//tools/buf:buf
+  * docker-compose: @@rules_multitool++multitool+multitool//tools/docker-compose:docker-compose
+  * ibazel:         @@rules_multitool++multitool+multitool//tools/ibazel:ibazel
+  * multitool:      @@rules_multitool++multitool+multitool//tools/multitool:multitool
+  * terraform:      @@rules_multitool++multitool+multitool//tools/terraform:terraform
 
 Toolchains available at stable relative paths:
   * cc_toolchain: bazel-out/bazel_env-opt/bin/bazel_env/toolchains/cc_toolchain
@@ -123,7 +128,7 @@ diff <(expected_output "$BAZEL_REPO_NAME_SEPARATOR") <(echo "$status_out") || ex
 #### Tools ####
 
 assert_cmd_output "bazel-cc --version" "@(*gcc*|*clang*)"
-assert_cmd_output "buildifier --version" "buildifier version: 6.4.0 "
+assert_cmd_output "buildifier --version" "buildifier version: 7.3.1 "
 assert_cmd_output "buildozer --version" "buildozer version: 7.1.2 "
 case "$(arch)" in
   i386|x86_64) goarch="amd64";;
@@ -142,6 +147,11 @@ assert_cmd_output "cargo --version" "cargo 1.80.0 (376290515 2024-07-16)"
 assert_cmd_output "rustc --version" "rustc 1.80.0 (051478957 2024-07-21)"
 assert_cmd_output "rustfmt --version" "rustfmt 1.7.0-stable (0514789* 2024-07-21)"
 assert_cmd_output "rustdoc --version" "rustdoc 1.80.0 (051478957 2024-07-21)"
+assert_cmd_output "buf --version" "1.39.0"
+assert_cmd_output "docker-compose --version" "Docker Compose version v2.29.2"
+assert_cmd_output "ibazel" "iBazel - Version v0.25.3"
+assert_cmd_output "multitool --help" "Usage: multitool [OPTIONS] <COMMAND>"
+assert_cmd_output "terraform --version" "Terraform v1.9.3"
 
 #### Toolchains ####
 

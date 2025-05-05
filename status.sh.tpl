@@ -2,6 +2,29 @@
 
 set -euo pipefail
 
+function fail_with_usage() {
+  echo "Usage: bazel run {{label}} [status|print-path]" >&2
+  exit 1
+}
+
+if [[ $# -gt 1 ]]; then
+  fail_with_usage
+fi
+
+if [[ $# -eq 1 ]]; then
+  subcommand="$1"
+else
+  subcommand="status"
+fi
+
+if [[ "$subcommand" == "print-path" ]]; then
+  echo "$BUILD_WORKSPACE_DIRECTORY/{{bin_dir}}"
+  exit 0
+fi
+if [[ "$subcommand" != "status" ]]; then
+  fail_with_usage
+fi
+
 cd "$BUILD_WORKSPACE_DIRECTORY"
 
 cat << 'EOF'
@@ -26,7 +49,7 @@ else
 
 1. Enable direnv's shell hook as described in https://direnv.net/docs/hook.html.
 
-2. Add the following snippet to a .envrc file next to your MODULE.bazel file:
+2. Ensure that the following snippet is contained in a .envrc file next to your MODULE.bazel file:
 
 watch_file {{bin_dir}}
 PATH_add {{bin_dir}}

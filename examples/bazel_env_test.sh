@@ -52,6 +52,22 @@ function assert_contains() {
 
 #### Status script ####
 
+# Verify the print-path subcommand works even without direnv.
+print_path_out=$(PATH="/bin:/usr/bin" \
+BUILD_WORKSPACE_DIRECTORY="$build_workspace_directory" \
+  ./bazel_env.sh print-path) || {
+    echo "print-path failed with output:"
+    echo "$print_path_out"
+    exit 1
+  }
+if [[ "$print_path_out" != "$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/bin" ]]; then
+  echo "print-path output did not match the expected path:"
+  echo "  $print_path_out"
+  echo "Expected:"
+  echo "  $build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/bin"
+  exit 1
+fi
+
 # Place a fake direnv tool on the PATH.
 tmpdir=$(mktemp -d 2>/dev/null || mktemp -d -t 'tmpdir')
 trap 'rm -rf "$tmpdir"' EXIT

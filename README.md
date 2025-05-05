@@ -12,7 +12,7 @@ The [example](examples/) includes some commonly used tools and toolchains.
 
 ## Setup
 
-### Setup per project
+### Once per project
 
 1. Add a dependency on `bazel_env.bzl` to your `MODULE.bazel` file:
 
@@ -41,7 +41,7 @@ bazel_env(
 )
 ```
 
-3. Run the `bazel_env` target and follow the instructions to install `direnv` and set up the `.envrc` file:
+3. Run the `bazel_env` target and follow the instructions to install `direnv` and set up the `.envrc` file, which should be committed to version control:
 
 ```
 $ bazel run //:bazel_env
@@ -66,7 +66,7 @@ fi
 Multiple `bazel_env` targets can be added per project.
 Note that each target will eagerly fetch and build all tools and toolchains when built, so consider splitting them up into workflow-specific targets if necessary.
 
-### Setup for individual developers
+### Once per user
 
 1. Run the `bazel_env` target and follow the instructions to install `direnv` and allowlist the `.envrc` file:
 
@@ -106,6 +106,15 @@ Tools available in PATH:
 
 Toolchains available at stable relative paths:
   * jdk: bazel-out/bazel_env-opt/bin/bazel_env/toolchains/jdk
+```
+
+### Without `direnv` (e.g., in CI)
+
+Run the `print-path` subcommand of the `bazel_env` target and manually add its output to your `PATH`.
+For GitHub Actions, this can be done as follows:
+
+```
+$ bazel run //:bazel_env print-path >> $GITHUB_PATH
 ```
 
 ## Usage

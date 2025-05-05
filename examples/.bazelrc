@@ -7,4 +7,6 @@ common --incompatible_disallow_empty_glob
 common --incompatible_strict_action_env
 common --nolegacy_external_runfiles
 common --nobuild_runfile_links
-common --noincompatible_enable_cc_toolchain_resolution
+# TODO: Uncomment this when it no longer crashes Bazel
+# https://github.com/bazelbuild/bazel/pull/25999
+# common --extra_execution_platforms=//:exotic_platform

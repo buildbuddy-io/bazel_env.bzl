@@ -48,11 +48,13 @@ py_binary(
     name = "python_tool",
     srcs = ["python_tool.py"],
     deps = [":python_tool_lib"],
+    tags = ["manual"],
 )
 
 py_library(
     name = "python_tool_lib",
     srcs = ["python_tool_lib.py"],
+    tags = ["manual"],
 )
 
 # Lines below are not part of the example, they are used to test the example.
@@ -81,4 +83,11 @@ sh_test(
 
 bazel_env(
     name = "empty_env",
+)
+
+platform(
+    name = "exotic_platform",
+    constraint_values = [
+        "@platforms//os:wasi",
+    ],
 )

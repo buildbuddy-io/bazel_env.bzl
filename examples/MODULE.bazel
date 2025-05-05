@@ -29,6 +29,10 @@ single_version_override(
     version = "7.0.2",
 )
 
+register_execution_platforms(
+    "//:exotic_platform",
+)
+
 # Don't update the versions below, they are only used to verify the hermeticity of bazel_env.
 
 go_sdk = use_extension("@rules_go//go:extensions.bzl", "go_sdk")

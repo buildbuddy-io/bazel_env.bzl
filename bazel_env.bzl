@@ -109,14 +109,11 @@ def _flip_output_dir_impl(settings, _attr):
         # Force "opt" mode for tools as they aren't rebuilt frequently and should be fast.
         # Force the output directory mnemonic to be the fixed string "bazel_env-opt" on all
         # platforms by using a fake CPU.
-        # Also ensure that the host platform has the highest precedence among the registered
-        # execution platforms so that toolchain resolution picks one that runs on the host.
-        # Note: We keep the target platform as is so that users can use toolchains with
-        # target constraints that are not the host platform, e.g., to have a C++ compiler compile
-        # for WASM if that's what the project usually does by setting `--platforms`.
+        # Important: don't set any settings other than --compilation_mode and --cpu as they
+        # would result in an ST hash appended to the output directory name, which must stay
+        # "bazel_env-opt". This is verified by tests.
         return settings | {
             _COMPILATION_MODE_SETTING: "opt",
-            _EXTRA_EXECUTION_PLATFORMS_SETTING: [settings[_HOST_PLATFORM_SETTING]],
             _CPU_SETTING: "bazel_env",
         }
     else:
@@ -124,8 +121,14 @@ def _flip_output_dir_impl(settings, _attr):
         # they usually shouldn't care about the value of --cpu and "bazel_env" is very unlikely
         # to have a platform mapping, but it's less confusing and potentially better for caching
         # if tool artifacts are under meaningful output directories.
+        # Also ensure that the host platform has the highest precedence among the registered
+        # execution platforms so that toolchain resolution picks one that runs on the host.
+        # Note: We keep the target platform as is so that users can use toolchains with
+        # target constraints that are not the host platform, e.g., to have a C++ compiler compile
+        # for WASM if that's what the project usually does by setting `--platforms`.
         return settings | {
             _CPU_SETTING: settings[_HOST_CPU_SETTING],
+            _EXTRA_EXECUTION_PLATFORMS_SETTING: [settings[_HOST_PLATFORM_SETTING]],
         }
 
 _flip_output_dir = transition(

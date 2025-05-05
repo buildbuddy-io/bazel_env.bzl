@@ -2,13 +2,13 @@
 
 set -euo pipefail
 
-function print_usage() {
+function fail_with_usage() {
   echo "Usage: bazel run {{label}} [status|print-path]" >&2
   exit 1
 }
 
 if [[ $# -gt 1 ]]; then
-  print_usage
+  fail_with_usage
 fi
 
 if [[ $# -eq 1 ]]; then
@@ -22,7 +22,7 @@ if [[ "$subcommand" == "print-path" ]]; then
   exit 0
 fi
 if [[ "$subcommand" != "status" ]]; then
-  print_usage
+  fail_with_usage
 fi
 
 cd "$BUILD_WORKSPACE_DIRECTORY"

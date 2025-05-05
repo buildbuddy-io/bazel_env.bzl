@@ -217,7 +217,7 @@ def _toolchain_impl(ctx):
     # type: (ctx) -> list[Provider]
     toolchain_name = ctx.label.name.rpartition("/")[-1]
 
-    repos = {file.owner.workspace_root: None for file in ctx.files.target}
+    repos = {file.owner.repo_name: None for file in ctx.files.target}
     target = ctx.attr.target[0]
     if not repos:
         suffix = ""
@@ -228,16 +228,35 @@ def _toolchain_impl(ctx):
             target.label,
             "for '{}' has no files{}".format(toolchain_name, suffix),
         )
-    if len(repos) > 1:
-        fail(
-            "toolchain target",
-            target.label,
-            "for '{}' has files from different repositories: {}".format(
-                toolchain_name,
-                ", ".join(repos.keys()),
-            ),
-        )
-    single_repo = repos.keys()[0]
+    if ctx.attr.preferred_repo:
+        if len(repos) < 1:
+            fail(
+                "toolchain target",
+                target.label,
+                "for '{}' only has files from a single repository, remove it from 'toolchains_preferred_repos'".format(toolchain_name)
+            )
+        if ctx.attr.preferred_repo not in repos:
+            fail(
+                "toolchain target",
+                target.label,
+                "for '{}' has files from different repositories: {}. The preferred repo '{}' is not one of them.".format(
+                    toolchain_name,
+                    ", ".join(["@@" + repo for repo in repos.keys()]),
+                    "@@" + ctx.attr.preferred_repo,
+                ),
+            )
+        single_repo = ctx.attr.preferred_repo
+    else:
+        if len(repos) > 1:
+            fail(
+                "toolchain target",
+                target.label,
+                "for '{}' has files from different repositories: {}".format(
+                    toolchain_name,
+                    ", ".join(["@@" + repo for repo in repos.keys()]),
+                ),
+            )
+        single_repo = repos.keys()[0]
 
     # bazel_env/toolchains/jdk --> 2 segments as symlink resolution is relative to the parent of jdk
     up_to_output_base_segments = ctx.label.name.count("/")
@@ -265,6 +284,7 @@ _toolchain = rule(
             cfg = _flip_output_dir,
             allow_files = True,
         ),
+        "preferred_repo": attr.string()
     },
 )
 
@@ -365,8 +385,8 @@ _bazel_env_rule = rule(
 
 _FORBIDDEN_TOOL_NAMES = ["direnv", "bazel", "bazelisk"]
 
-def bazel_env(*, name, tools = {}, toolchains = {}, **kwargs):
-    # type: (string, dict[string, string | Label], dict[string, string | Label]) -> None
+def bazel_env(*, name, tools = {}, toolchains = {}, toolchains_preferred_repos = {}, **kwargs):
+    # type: (string, dict[string, string | Label], dict[string, string | Label], dict[string, string | Label]) -> None
     """Makes Bazel-managed tools and toolchains available under stable paths.
 
     Build this target to make the given tools and toolchains available under stable,
@@ -394,6 +414,12 @@ def bazel_env(*, name, tools = {}, toolchains = {}, **kwargs):
         toolchains: A dictionary mapping toolchain names to their targets. The name is used as the
             basename of the toolchain directory in the `toolchains` directory. The directory is
             a symlink to the repository root of the (single) repository containing the toolchain.
+
+        toolchains_preferred_repo: A dictionary mapping toolchain to the label of the repo that
+            should be provided in the `toolchains` directory. This should be used if (and only if)
+            the files provided by the toolchain span multiple repositories. Prefer a label with an
+            apparent repo name (a single `@`) such as `@llvm`, which you can set via `use_repo` in
+            your `MODULE.bazel` file if needed.
 
         **kwargs: Additional arguments to pass to the main `bazel_env` target. It is usually not
             necessary to provide any and the target should have private visibility.
@@ -465,9 +491,15 @@ def bazel_env(*, name, tools = {}, toolchains = {}, **kwargs):
             fail("empty toolchain names are not allowed")
         toolchain_target_name = name + "/toolchains/" + toolchain_name
         toolchain_targets.append(toolchain_target_name)
+        preferred_repo = None
+        raw_preferred_repo = toolchains_preferred_repos.get(toolchain_name)
+        if raw_preferred_repo != None:
+            preferred_repo_label = native.package_relative_label(raw_preferred_repo)
+            preferred_repo = preferred_repo_label.repo_name
         _toolchain(
             name = toolchain_target_name,
             target = toolchain,
+            preferred_repo = preferred_repo,
             visibility = ["//visibility:private"],
             tags = ["manual"],
         )

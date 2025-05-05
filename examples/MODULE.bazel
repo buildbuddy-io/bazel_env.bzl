@@ -9,6 +9,7 @@ local_path_override(
     path = "..",
 )
 
+bazel_dep(name = "toolchains_llvm", version = "1.4.0")
 bazel_dep(name = "aspect_rules_js", version = "2.0.0-rc4")
 bazel_dep(name = "buildifier_prebuilt", version = "6.4.0")
 bazel_dep(name = "buildozer", version = "7.1.2")
@@ -18,6 +19,16 @@ bazel_dep(name = "rules_nodejs", version = "6.1.1")
 bazel_dep(name = "rules_python", version = "0.32.2")
 bazel_dep(name = "rules_rust", version = "0.49.3")
 bazel_dep(name = "platforms", version = "0.0.10")
+
+llvm = use_extension("@toolchains_llvm//toolchain/extensions:llvm.bzl", "llvm")
+llvm.toolchain(
+    name = "llvm",
+    llvm_version = "15.0.6",
+)
+use_repo(llvm, "llvm")
+
+register_toolchains("@llvm//:all")
+
 # Required for compatibillity with Bazel@HEAD.
 single_version_override(
     module_name = "rules_proto",

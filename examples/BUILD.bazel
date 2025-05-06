@@ -2,6 +2,7 @@ load("@bazel_env.bzl", "bazel_env")
 load("@buildozer//:buildozer.bzl", "BUILDOZER_LABEL")
 load("@multitool//:tools.bzl", MULTITOOL_TOOLS = "TOOLS")
 load("@rules_python//python:py_binary.bzl", "py_binary")
+load("@rules_python//python:py_library.bzl", "py_library")
 
 # Test-only workaround for https://github.com/buildbuddy-io/bazel_env.bzl/pull/35#issuecomment-2853979830.
 # Ignore this line for the purpose of the example.
@@ -43,7 +44,7 @@ alias(
     name = "jq",
     actual = select({
         "@platforms//os:linux": "@jq_linux_amd64//file",
-        "@platforms//os:macos": "@jq_macos_amd64//file",
+        "@platforms//os:macos": "@jq_macos_arm64//file",
         "@platforms//os:windows": "@jq_windows_amd64//file",
     }),
 )

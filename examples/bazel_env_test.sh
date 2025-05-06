@@ -137,7 +137,7 @@ esac
 assert_cmd_output "go version" "go version go1.20.14 $(uname|tr '[:upper:]' '[:lower:]')/$goarch"
 assert_cmd_output "jar --version" "jar 17.0.11"
 assert_cmd_output "java --version" "openjdk 17.0.11 2024-04-16 LTS"
-assert_cmd_output "jq --version" "jq-1.5"
+assert_cmd_output "jq --version" "jq-1.7"
 assert_cmd_output "node --version" "v16.18.1"
 assert_cmd_output "pnpm --version" "8.6.7"
 assert_cmd_output "python --version" "Python 3.11.8"

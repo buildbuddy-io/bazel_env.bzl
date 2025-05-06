@@ -26,6 +26,7 @@ single_version_override(
     module_name = "buildozer",
     version = "7.1.2",
 )
+
 single_version_override(
     module_name = "rules_proto",
     version = "7.0.2",
@@ -75,22 +76,22 @@ http_file = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_
 http_file(
     name = "jq_linux_amd64",
     executable = True,
-    integrity = "sha256-xrOn19PntwxvUbcGo7kL0BgzhGxU0yyjLwAn8AIm/20=",
-    urls = ["https://github.com/jqlang/jq/releases/download/jq-1.5/jq-linux64"],
+    integrity = "sha256-LzErlYexwe3fOlP5oLfSdrm3uUV2yFvaIoCMqVBWlxY=",
+    urls = ["https://github.com/jqlang/jq/releases/download/jq-1.7/jq-linux64"],
 )
 
 http_file(
-    name = "jq_macos_amd64",
+    name = "jq_macos_arm64",
     executable = True,
-    integrity = "sha256-OG6SyYKlb+SFFGjXqTHfyilWDO4wag5mxqG9QGXT2sU=",
-    urls = ["https://github.com/jqlang/jq/releases/download/jq-1.5/jq-osx-amd64"],
+    integrity = "sha256-uNMT/U872KCzOLnd0cAG/M+TEtxgmiDS1uS62WSqmfk=",
+    urls = ["https://github.com/jqlang/jq/releases/download/jq-1.7/jq-macos-arm64"],
 )
 
 http_file(
     name = "jq_windows_amd64",
     executable = True,
-    integrity = "sha256-6+zYQLpH779mgihoF4zHIaFRBgk396xAbj0xvQFb3pQ=",
-    urls = ["https://github.com/jqlang/jq/releases/download/jq-1.5/jq-win64.exe"],
+    integrity = "sha256-LpzFTQpdCY4gB97OwduzxVXKL1qr3teuyQf+D/5AGqs=",
+    urls = ["https://github.com/jqlang/jq/releases/download/jq-1.7/jq-win64.exe"],
 )
 
 multitool = use_extension("@rules_multitool//multitool:extension.bzl", "multitool")

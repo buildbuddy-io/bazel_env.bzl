@@ -108,11 +108,11 @@ Tools available in PATH:
   * rustfmt:        \$(RUSTFMT)
   * rustc:          \$(RUSTC)
   * rustdoc:        \$(RUSTDOC)
-  * buf:            @@rules_multitool++multitool+multitool//tools/buf:buf
-  * docker-compose: @@rules_multitool++multitool+multitool//tools/docker-compose:docker-compose
-  * ibazel:         @@rules_multitool++multitool+multitool//tools/ibazel:ibazel
-  * multitool:      @@rules_multitool++multitool+multitool//tools/multitool:multitool
-  * terraform:      @@rules_multitool++multitool+multitool//tools/terraform:terraform
+  * buf:            @@rules_multitool${sep}${sep}multitool${sep}multitool//tools/buf:buf
+  * docker-compose: @@rules_multitool${sep}${sep}multitool${sep}multitool//tools/docker-compose:docker-compose
+  * ibazel:         @@rules_multitool${sep}${sep}multitool${sep}multitool//tools/ibazel:ibazel
+  * multitool:      @@rules_multitool${sep}${sep}multitool${sep}multitool//tools/multitool:multitool
+  * terraform:      @@rules_multitool${sep}${sep}multitool${sep}multitool//tools/terraform:terraform
 
 Toolchains available at stable relative paths:
   * cc_toolchain: bazel-out/bazel_env-opt/bin/bazel_env/toolchains/cc_toolchain

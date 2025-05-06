@@ -22,13 +22,6 @@
                 "sha256": "7163faf9da829afa633194ffa11e4a4ef8d7b8359cefbc13f71a58cc3b860d9e",
                 "os": "macos",
                 "cpu": "arm64"
-            },
-            {
-                "kind": "file",
-                "url": "https://github.com/bufbuild/buf/releases/download/v1.39.0/buf-Darwin-x86_64",
-                "sha256": "b44da381dfc9980aed822476d12645f981761ea8ac7f135772d9f02246c8ac31",
-                "os": "macos",
-                "cpu": "x86_64"
             }
         ]
     },

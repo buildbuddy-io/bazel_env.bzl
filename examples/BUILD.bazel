@@ -1,7 +1,11 @@
+load("@bazel_env.bzl", "bazel_env")
 load("@buildozer//:buildozer.bzl", "BUILDOZER_LABEL")
 load("@multitool//:tools.bzl", MULTITOOL_TOOLS = "TOOLS")
 load("@rules_python//python:py_binary.bzl", "py_binary")
-load("@bazel_env.bzl", "bazel_env")
+
+# Test-only workaround for https://github.com/buildbuddy-io/bazel_env.bzl/pull/35#issuecomment-2853979830.
+# Ignore this line for the purpose of the example.
+load("@rules_shell//shell/private:sh_test.bzl", "sh_test")
 load(":test_helpers.bzl", "REPO_NAME_SEPARATOR")
 
 # `bazel run //:bazel_env` prints a summary and setup steps.
@@ -47,8 +51,8 @@ alias(
 py_binary(
     name = "python_tool",
     srcs = ["python_tool.py"],
-    deps = [":python_tool_lib"],
     tags = ["manual"],
+    deps = [":python_tool_lib"],
 )
 
 py_library(

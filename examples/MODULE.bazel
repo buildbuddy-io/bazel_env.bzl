@@ -33,7 +33,7 @@ single_version_override(
 )
 
 register_execution_platforms(
-    "//:exotic_platform",
+    # "//:exotic_platform",
 )
 
 # Don't update the versions below, they are only used to verify the hermeticity of bazel_env.

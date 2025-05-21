@@ -120,6 +120,8 @@ Toolchains available at stable relative paths:
   * python:       bazel-out/bazel_env-opt/bin/bazel_env/toolchains/python
   * nodejs:       bazel-out/bazel_env-opt/bin/bazel_env/toolchains/nodejs
   * rust:         bazel-out/bazel_env-opt/bin/bazel_env/toolchains/rust
+
+⚠️  Remember to run 'hash -r' in bash to update the locations of binaries on the PATH.
 "
 }
 

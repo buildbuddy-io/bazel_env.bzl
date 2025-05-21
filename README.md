@@ -128,6 +128,11 @@ The [example](examples/) demonstrates a use of `rules_multitool` to fetch tools 
 Build the `bazel_env` target to keep the tools and toolchains up-to-date with the Bazel build.
 The target can also be executed with `bazel run` to print the list of tools and toolchains as well as clean up removed tools.
 
+> [!IMPORTANT]
+> Shells such as `bash` and `zsh` will not automatically pick up changes to directories in `PATH`.
+> You may need to run `hash -r` or `rehash` to clear the shell's command cache.
+> `bazel run //:bazel_env` will print the command to run.
+
 ## Documentation
 
 See the [generated documentation](docs-gen/bazel_env.md) for more information on the `bazel_env` rule.

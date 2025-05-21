@@ -93,3 +93,14 @@ Toolchains available at stable relative paths:
 
 EOF
 fi
+
+set +e
+# $$ is bash's PID, $PPID is Bazel's PID.
+outer_shell_pid=$(ps -o ppid= $PPID)
+outer_shell_name=$(ps -cp "$outer_shell_pid" -o command="")
+set -e
+if [[ "$outer_shell_name" == *zsh* ]]; then
+  echo "⚠️  Remember to run 'rehash' in zsh to update the locations of binaries on the PATH."
+elif [[ "$outer_shell_name" == *bash* ]]; then
+  echo "⚠️  Remember to run 'hash -r' in bash to update the locations of binaries on the PATH."
+fi

@@ -1,5 +1,6 @@
 common --tool_java_runtime_version=remotejdk_17
 common --test_output=errors
+common --check_direct_dependencies=error
 
 # These settings make it harder for bazel_env to do its job and are here to
 # verify it still works.

@@ -32,7 +32,7 @@ well as cleans up stale tools.
 | :------------- | :------------- | :------------- |
 | <a id="bazel_env-name"></a>name |  The name of the rule.   |  none |
 | <a id="bazel_env-tools"></a>tools |  A dictionary mapping tool names to their targets or paths. The name is used as the basename of the tool in the `bin` directory and will be available on `PATH`.<br><br>If a target is provided, the corresponding executable is staged in the `bin` directory together with its runfiles.<br><br>If a path is provided, Make variables provided by `toolchains` are expanded in it and all the files of referenced toolchains are staged as runfiles.   |  `{}` |
-| <a id="bazel_env-toolchains"></a>toolchains |  A dictionary mapping toolchain names to their targets. The name is used as the basename of the toolchain directory in the `toolchains` directory. The directory is a symlink to the repository root of the (single) repository containing the toolchain.   |  `{}` |
+| <a id="bazel_env-toolchains"></a>toolchains |  A dictionary mapping toolchain names to their targets. The name is used as the basename of the toolchain directory in the `toolchains` directory. The directory is a symlink to the repository root of the (single) repository containing the toolchain.<br><br>With Bazel 9.0.0-pre.20250311.1 and later, toolchain_type targets can be used directly. In older versions, use a "resolved" toolchain target such as `@bazel_tools//tools/cpp:current_cc_toolchain` instead.   |  `{}` |
 | <a id="bazel_env-kwargs"></a>kwargs |  Additional arguments to pass to the main `bazel_env` target. It is usually not necessary to provide any and the target should have private visibility.   |  none |
 
 

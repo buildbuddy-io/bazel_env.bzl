@@ -1,3 +1,4 @@
+load("@bazel_features//:features.bzl", "bazel_features")
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
 
 def _rlocation_path(ctx, file):
@@ -141,6 +142,68 @@ _flip_output_dir = transition(
 )
 
 _ToolInfo = provider(fields = ["name", "raw_tool"])
+_ToolchainInfo = provider(fields = ["files", "label", "variables"])
+_IsToolchainTypeInfo = provider(fields = [])
+_IsToolchainType = _IsToolchainTypeInfo()
+_BAZEL_ENV_GENRULE_TAG = "bazel_env.bzl_genrule_tag"
+
+# Requires 9.0.0-pre.20250311.1 or higher to be able to extract the resolved toolchain target out of
+# the helper genrule via an aspect. Any such version also supports toolchain_type rules in genrule's
+# toolchains attribute (https://github.com/bazelbuild/bazel/commit/0e876b1794d4db58b72949014401d22cc65d94a1).
+_TOOLCHAIN_TYPES_SUPPORTED = bazel_features.rules.aspect_propagation_context
+
+def _is_toolchain_type_aspect_impl(_target, ctx):
+    # type: (Target, ctx) -> list[Provider]
+    if ctx.rule.kind != "toolchain_type":
+        return []
+    if not _TOOLCHAIN_TYPES_SUPPORTED:
+        fail("toolchain_type targets in bazel_env's toolchains attribute are not supported with this version of Bazel, please upgrade to 9.0.0-pre.20250311.1 or higher")
+    return [_IsToolchainType]
+
+_is_toolchain_type_aspect = aspect(_is_toolchain_type_aspect_impl)
+
+def _is_toolchain_type_flag_impl(ctx):
+    # type: (ctx) -> FeatureFlagInfo
+    return [config_common.FeatureFlagInfo(value = str(_IsToolchainTypeInfo in ctx.attr.target))]
+
+_is_toolchain_type_flag = rule(
+    implementation = _is_toolchain_type_flag_impl,
+    attrs = {
+        "target": attr.label(
+            aspects = [_is_toolchain_type_aspect],
+        ),
+    },
+)
+
+def _extract_toolchain_info_impl(target, ctx):
+    # type: (Target, ctx) -> list[Provider]
+    if _BAZEL_ENV_GENRULE_TAG in ctx.rule.attr.tags:
+        # The target is the helper genrule we use to dynamically resolve the toolchain type provided
+        # by the user. Forward the aspect's provider from the resolved toolchain target.
+        toolchain_type_target = ctx.rule.attr.toolchains[0]
+        resolved_target = ctx.rule.toolchains[toolchain_type_target.label]
+        return [resolved_target[_ToolchainInfo]]
+
+    # This is a resolved toolchain target, either resolved via the genrule trick or specified
+    # directly by the user.
+    return [
+        _ToolchainInfo(
+            files = target[DefaultInfo].files,
+            label = target.label,
+            variables = target[platform_common.TemplateVariableInfo].variables if platform_common.TemplateVariableInfo in target else {},
+        ),
+    ]
+
+_extract_toolchain_info = aspect(
+    implementation = _extract_toolchain_info_impl,
+    **(
+        # This feature is required to extracted the info of the resolved toolchain target from the
+        # helper genrule.
+        dict(
+            toolchains_aspects = lambda ctx: ctx.rule.attr.toolchains.value if _BAZEL_ENV_GENRULE_TAG in ctx.rule.attr.tags.value else [],
+        ) if _TOOLCHAIN_TYPES_SUPPORTED else {}
+    )
+)
 
 def _tool_impl(ctx):
     # type: (ctx) -> list[Provider]
@@ -152,18 +215,16 @@ def _tool_impl(ctx):
         vars = {
             k: v
             for toolchain in ctx.attr.toolchain_targets
-            if platform_common.TemplateVariableInfo in toolchain
-            for k, v in toolchain[platform_common.TemplateVariableInfo].variables.items()
+            for k, v in toolchain[_ToolchainInfo].variables.items()
         }
         raw_path, used_vars = _expand_make_variables(ctx.attr.path, vars)
         rlocation_path = _heuristic_rlocation_path(ctx, raw_path)
 
         transitive_files = []
         for toolchain in ctx.attr.toolchain_targets:
-            if platform_common.TemplateVariableInfo in toolchain:
-                for key in toolchain[platform_common.TemplateVariableInfo].variables.keys():
-                    if key in used_vars:
-                        transitive_files.append(toolchain[DefaultInfo].files)
+            for key in toolchain[_ToolchainInfo].variables.keys():
+                if key in used_vars:
+                    transitive_files.append(toolchain[_ToolchainInfo].files)
         runfiles = ctx.runfiles(transitive_files = depset(transitive = transitive_files))
     else:
         # There is only ever a single target, the attribute only takes an array value because of the transition.
@@ -214,7 +275,7 @@ _tool = rule(
         "raw_tool": attr.string(),
         "toolchain_targets": attr.label_list(
             cfg = _flip_output_dir,
-            allow_files = True,
+            aspects = [_extract_toolchain_info],
         ),
         "_launcher": attr.label(
             allow_single_file = True,
@@ -230,21 +291,18 @@ def _toolchain_impl(ctx):
     # type: (ctx) -> list[Provider]
     toolchain_name = ctx.label.name.rpartition("/")[-1]
 
-    repos = {file.owner.workspace_root: None for file in ctx.files.target}
-    target = ctx.attr.target[0]
+    toolchain_info = ctx.attr.target[0][_ToolchainInfo]
+    repos = {file.owner.workspace_root: None for file in toolchain_info.files.to_list()}
     if not repos:
-        suffix = ""
-        if target.label.name == "toolchain_type":
-            suffix = ". 'toolchain_type' targets are not supported here, look for a 'current_*_{runtime,toolchain}' target instead."
         fail(
             "toolchain target",
-            target.label,
-            "for '{}' has no files{}".format(toolchain_name, suffix),
+            toolchain_info.label,
+            "for '{}' has no files".format(toolchain_name),
         )
     if len(repos) > 1:
         fail(
             "toolchain target",
-            target.label,
+            toolchain_info.label,
             "for '{}' has files from different repositories: {}".format(
                 toolchain_name,
                 ", ".join(repos.keys()),
@@ -276,7 +334,7 @@ _toolchain = rule(
     attrs = {
         "target": attr.label(
             cfg = _flip_output_dir,
-            allow_files = True,
+            aspects = [_extract_toolchain_info],
         ),
     },
 )
@@ -365,7 +423,9 @@ _bazel_env_rule = rule(
         "tool_targets": attr.label_list(
             providers = [_ToolInfo],
         ),
-        "toolchain_targets": attr.label_list(),
+        "toolchain_targets": attr.label_list(
+            aspects = [_extract_toolchain_info],
+        ),
         "_status": attr.label(
             allow_single_file = True,
             cfg = "target",
@@ -408,16 +468,16 @@ def bazel_env(*, name, tools = {}, toolchains = {}, **kwargs):
             basename of the toolchain directory in the `toolchains` directory. The directory is
             a symlink to the repository root of the (single) repository containing the toolchain.
 
+            With Bazel 9.0.0-pre.20250311.1 and later, toolchain_type targets can be used directly.
+            In older versions, use a "resolved" toolchain target such as
+            `@bazel_tools//tools/cpp:current_cc_toolchain` instead.
+
         **kwargs: Additional arguments to pass to the main `bazel_env` target. It is usually not
             necessary to provide any and the target should have private visibility.
     """
     tool_targets = []
     toolchain_targets = []
-
-    reversed_toolchains = {
-        toolchain: toolchain_name
-        for toolchain_name, toolchain in toolchains.items()
-    }
+    toolchain_info_targets = {}
 
     # This name is supposed to be unique in PATH on a best-effort basis. If it isn't unique,
     # status.sh may fail to detect that direnv isn't set up correctly - it looks for this tool
@@ -448,6 +508,63 @@ def bazel_env(*, name, tools = {}, toolchains = {}, **kwargs):
         tags = ["manual"],
     )
 
+    for toolchain_name, toolchain in toolchains.items():
+        if not toolchain_name:
+            fail("empty toolchain names are not allowed")
+        toolchain_target_name = name + "/toolchains/" + toolchain_name
+
+        # Use the special capability of genrule to dynamically resolve toolchain types specified in
+        # its toolchains attribute to give the same power to bazel_env.
+        genrule_or_toolchain_name = name + ".genrule_or_toolchain." + toolchain_name
+        toolchain_genrule_name = name + ".helper_genrule." + toolchain_name
+        is_toolchain_type_flag_name = name + ".is_toolchain_type_flag." + toolchain_name
+        is_toolchain_type_name = name + ".is_toolchain_type." + toolchain_name
+        toolchain_targets.append(toolchain_target_name)
+        toolchain_info_targets[genrule_or_toolchain_name] = toolchain_name
+
+        _is_toolchain_type_flag(
+            name = is_toolchain_type_flag_name,
+            target = toolchain,
+            visibility = ["//visibility:private"],
+            tags = ["manual"],
+        )
+        native.config_setting(
+            name = is_toolchain_type_name,
+            flag_values = {
+                is_toolchain_type_flag_name: str(True),
+            },
+            visibility = ["//visibility:private"],
+            tags = ["manual"],
+        )
+        native.genrule(
+            name = toolchain_genrule_name,
+            outs = [toolchain_genrule_name + ".txt"],
+            # This genrule is never built and tagged as manual, but if a user
+            # ends up requesting it, it should not fail.
+            cmd = "touch $@",
+            toolchains = [toolchain],
+            visibility = ["//visibility:private"],
+            tags = [
+                _BAZEL_ENV_GENRULE_TAG,
+                "manual",
+            ],
+        )
+        native.alias(
+            name = genrule_or_toolchain_name,
+            actual = select({
+                native.package_relative_label(is_toolchain_type_name): ":" + toolchain_genrule_name,
+                "//conditions:default": toolchain,
+            }),
+            visibility = ["//visibility:private"],
+            tags = ["manual"],
+        )
+        _toolchain(
+            name = toolchain_target_name,
+            target = ":" + genrule_or_toolchain_name,
+            visibility = ["//visibility:private"],
+            tags = ["manual"],
+        )
+
     for tool_name, tool in tools.items():
         if not tool_name:
             fail("empty tool names are not allowed")
@@ -467,22 +584,10 @@ def bazel_env(*, name, tools = {}, toolchains = {}, **kwargs):
         _tool(
             name = tool_target_name,
             raw_tool = str(tool),
-            toolchain_targets = reversed_toolchains,
+            toolchain_targets = toolchain_info_targets,
             visibility = ["//visibility:private"],
             tags = ["manual"],
             **tool_kwargs
-        )
-
-    for toolchain_name, toolchain in toolchains.items():
-        if not toolchain_name:
-            fail("empty toolchain names are not allowed")
-        toolchain_target_name = name + "/toolchains/" + toolchain_name
-        toolchain_targets.append(toolchain_target_name)
-        _toolchain(
-            name = toolchain_target_name,
-            target = toolchain,
-            visibility = ["//visibility:private"],
-            tags = ["manual"],
         )
 
     _bazel_env_rule(

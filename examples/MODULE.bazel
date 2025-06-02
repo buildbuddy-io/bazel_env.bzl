@@ -10,6 +10,7 @@ local_path_override(
 )
 
 bazel_dep(name = "aspect_rules_js", version = "2.0.0-rc4")
+bazel_dep(name = "bazel_features", version = "1.31.0")
 bazel_dep(name = "buildifier_prebuilt", version = "7.3.1")
 bazel_dep(name = "buildozer")
 bazel_dep(name = "platforms", version = "1.0.0")
@@ -42,7 +43,7 @@ git_override(
 # TODO: Remove after the next release of rules_go.
 git_override(
     module_name = "rules_go",
-    commit = "ae5ce4950fbcc7f0a0cc4b4485891c41eada395e",
+    commit = "0aa693db647ef99eeaf020cddd7ba967139be1c4",
     remote = "https://github.com/bazel-contrib/rules_go",
 )
 

@@ -138,6 +138,24 @@ _flip_output_dir = transition(
 )
 
 _ToolInfo = provider(fields = ["name", "raw_tool"])
+_ToolchainInfo = provider(fields = ["files", "variables"])
+
+def _extract_toolchain_info_impl(_target, ctx):
+    # type: (Target, ctx) -> list[Provider]
+    print(_target.label)
+
+    toolchain_target = ctx.rule.attr.toolchains[0]
+    if toolchain_target.label in ctx.rule.toolchains:
+        toolchain_target = ctx.rule.toolchains[toolchain_target.label]
+
+    return [
+        _ToolchainInfo(
+            files = toolchain_target[DefaultInfo].files,
+            variables = toolchain_target[platform_common.TemplateVariableInfo].variables if platform_common.TemplateVariableInfo in toolchain_target else {},
+        ),
+    ]
+
+_extract_toolchain_info = aspect(implementation = _extract_toolchain_info_impl)
 
 def _tool_impl(ctx):
     # type: (ctx) -> list[Provider]
@@ -149,18 +167,16 @@ def _tool_impl(ctx):
         vars = {
             k: v
             for toolchain in ctx.attr.toolchain_targets
-            if platform_common.TemplateVariableInfo in toolchain
-            for k, v in toolchain[platform_common.TemplateVariableInfo].variables.items()
+            for k, v in toolchain[_ToolchainInfo].variables.items()
         }
         raw_path, used_vars = _expand_make_variables(ctx.attr.path, vars)
         rlocation_path = _heuristic_rlocation_path(ctx, raw_path)
 
         transitive_files = []
         for toolchain in ctx.attr.toolchain_targets:
-            if platform_common.TemplateVariableInfo in toolchain:
-                for key in toolchain[platform_common.TemplateVariableInfo].variables.keys():
-                    if key in used_vars:
-                        transitive_files.append(toolchain[DefaultInfo].files)
+            for key in toolchain[_ToolchainInfo].variables.keys():
+                if key in used_vars:
+                    transitive_files.append(toolchain[_ToolchainInfo].files)
         runfiles = ctx.runfiles(transitive_files = depset(transitive = transitive_files))
     else:
         # There is only ever a single target, the attribute only takes an array value because of the transition.
@@ -211,7 +227,7 @@ _tool = rule(
         "raw_tool": attr.string(),
         "toolchain_targets": attr.label_list(
             cfg = _flip_output_dir,
-            allow_files = True,
+            aspects = [_extract_toolchain_info],
         ),
         "_launcher": attr.label(
             allow_single_file = True,
@@ -227,21 +243,22 @@ def _toolchain_impl(ctx):
     # type: (ctx) -> list[Provider]
     toolchain_name = ctx.label.name.rpartition("/")[-1]
 
-    repos = {file.owner.workspace_root: None for file in ctx.files.target}
-    target = ctx.attr.target[0]
+    files = ctx.attr.target[0][_ToolchainInfo].files
+    repos = {file.owner.workspace_root: None for file in files.to_list()}
+    target_label = ctx.attr.target[0].label
     if not repos:
         suffix = ""
-        if target.label.name == "toolchain_type":
+        if target_label.label.name == "toolchain_type":
             suffix = ". 'toolchain_type' targets are not supported here, look for a 'current_*_{runtime,toolchain}' target instead."
         fail(
             "toolchain target",
-            target.label,
+            target_label.label,
             "for '{}' has no files{}".format(toolchain_name, suffix),
         )
     if len(repos) > 1:
         fail(
             "toolchain target",
-            target.label,
+            target_label.label,
             "for '{}' has files from different repositories: {}".format(
                 toolchain_name,
                 ", ".join(repos.keys()),
@@ -273,7 +290,7 @@ _toolchain = rule(
     attrs = {
         "target": attr.label(
             cfg = _flip_output_dir,
-            allow_files = True,
+            aspects = [_extract_toolchain_info],
         ),
     },
 )
@@ -362,7 +379,9 @@ _bazel_env_rule = rule(
         "tool_targets": attr.label_list(
             providers = [_ToolInfo],
         ),
-        "toolchain_targets": attr.label_list(),
+        "toolchain_targets": attr.label_list(
+            aspects = [_extract_toolchain_info],
+        ),
         "_status": attr.label(
             allow_single_file = True,
             cfg = "target",
@@ -410,11 +429,7 @@ def bazel_env(*, name, tools = {}, toolchains = {}, **kwargs):
     """
     tool_targets = []
     toolchain_targets = []
-
-    reversed_toolchains = {
-        toolchain: toolchain_name
-        for toolchain_name, toolchain in toolchains.items()
-    }
+    toolchain_info_targets = {}
 
     # This name is supposed to be unique in PATH on a best-effort basis. If it isn't unique,
     # status.sh may fail to detect that direnv isn't set up correctly - it looks for this tool
@@ -445,6 +460,33 @@ def bazel_env(*, name, tools = {}, toolchains = {}, **kwargs):
         tags = ["manual"],
     )
 
+    for toolchain_name, toolchain in toolchains.items():
+        if not toolchain_name:
+            fail("empty toolchain names are not allowed")
+        toolchain_target_name = name + "/toolchains/" + toolchain_name
+
+        # Don't pollute the toolchains directory with this helper target.
+        toolchain_genrule_name = name + ".genrule." + toolchain_name
+        toolchain_targets.append(toolchain_target_name)
+        toolchain_info_targets[toolchain_genrule_name] = toolchain_name
+
+        native.genrule(
+            name = toolchain_genrule_name,
+            outs = [toolchain_genrule_name + ".txt"],
+            # This genrule is never built and tagged as manual, but if a user
+            # ends up requesting it, it should not fail.
+            cmd = "touch $@",
+            toolchains = [toolchain],
+            visibility = ["//visibility:private"],
+            tags = ["manual"],
+        )
+        _toolchain(
+            name = toolchain_target_name,
+            target = ":" + toolchain_genrule_name,
+            visibility = ["//visibility:private"],
+            tags = ["manual"],
+        )
+
     for tool_name, tool in tools.items():
         if not tool_name:
             fail("empty tool names are not allowed")
@@ -464,22 +506,10 @@ def bazel_env(*, name, tools = {}, toolchains = {}, **kwargs):
         _tool(
             name = tool_target_name,
             raw_tool = str(tool),
-            toolchain_targets = reversed_toolchains,
+            toolchain_targets = toolchain_info_targets,
             visibility = ["//visibility:private"],
             tags = ["manual"],
             **tool_kwargs
-        )
-
-    for toolchain_name, toolchain in toolchains.items():
-        if not toolchain_name:
-            fail("empty toolchain names are not allowed")
-        toolchain_target_name = name + "/toolchains/" + toolchain_name
-        toolchain_targets.append(toolchain_target_name)
-        _toolchain(
-            name = toolchain_target_name,
-            target = toolchain,
-            visibility = ["//visibility:private"],
-            tags = ["manual"],
         )
 
     _bazel_env_rule(

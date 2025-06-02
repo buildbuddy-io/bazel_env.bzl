@@ -139,23 +139,34 @@ _flip_output_dir = transition(
 
 _ToolInfo = provider(fields = ["name", "raw_tool"])
 _ToolchainInfo = provider(fields = ["files", "variables"])
+BAZEL_ENV_GENRULE_TAG = "bazel_env.bzl_genrule_tag"
 
-def _extract_toolchain_info_impl(_target, ctx):
+def _extract_toolchain_info_impl(target, ctx):
     # type: (Target, ctx) -> list[Provider]
-    print(_target.label)
+    if not BAZEL_ENV_GENRULE_TAG in ctx.rule.attr.tags:
+        # This is either the toolchain target we want or a toolchain_type target.
+        return [
+            _ToolchainInfo(
+                files = target[DefaultInfo].files,
+                variables = target[platform_common.TemplateVariableInfo].variables if platform_common.TemplateVariableInfo in target else {},
+            ),
+        ]
+
+    if not hasattr(ctx.rule.attr, "toolchains"):
+        # This is a special native rule. toolchain_type falls into this category.
+        return []
 
     toolchain_target = ctx.rule.attr.toolchains[0]
     if toolchain_target.label in ctx.rule.toolchains:
         toolchain_target = ctx.rule.toolchains[toolchain_target.label]
 
-    return [
-        _ToolchainInfo(
-            files = toolchain_target[DefaultInfo].files,
-            variables = toolchain_target[platform_common.TemplateVariableInfo].variables if platform_common.TemplateVariableInfo in toolchain_target else {},
-        ),
-    ]
+    return [toolchain_target[_ToolchainInfo]]
 
-_extract_toolchain_info = aspect(implementation = _extract_toolchain_info_impl)
+_extract_toolchain_info = aspect(
+    implementation = _extract_toolchain_info_impl,
+    attr_aspects = ["toolchains"],
+    toolchains_aspects = lambda ctx: ctx.rule.attr.toolchains.value if hasattr(ctx.rule.attr, "toolchains") else [],
+)
 
 def _tool_impl(ctx):
     # type: (ctx) -> list[Provider]
@@ -247,13 +258,10 @@ def _toolchain_impl(ctx):
     repos = {file.owner.workspace_root: None for file in files.to_list()}
     target_label = ctx.attr.target[0].label
     if not repos:
-        suffix = ""
-        if target_label.label.name == "toolchain_type":
-            suffix = ". 'toolchain_type' targets are not supported here, look for a 'current_*_{runtime,toolchain}' target instead."
         fail(
             "toolchain target",
             target_label.label,
-            "for '{}' has no files{}".format(toolchain_name, suffix),
+            "for '{}' has no files".format(toolchain_name),
         )
     if len(repos) > 1:
         fail(
@@ -478,7 +486,10 @@ def bazel_env(*, name, tools = {}, toolchains = {}, **kwargs):
             cmd = "touch $@",
             toolchains = [toolchain],
             visibility = ["//visibility:private"],
-            tags = ["manual"],
+            tags = [
+                BAZEL_ENV_GENRULE_TAG,
+                "manual",
+            ],
         )
         _toolchain(
             name = toolchain_target_name,

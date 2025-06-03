@@ -18,6 +18,7 @@ bazel_env(
         "python": "@rules_python//python:current_py_toolchain",
         "nodejs": "@nodejs_toolchains//:resolved_toolchain",
         "rust": "@rules_rust//rust/toolchain:current_rust_toolchain",
+        "rules_python_docs": "@rules_python_docs",
     },
     tools = {
         # Tool paths can reference the Make variables provided by toolchains.

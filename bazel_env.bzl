@@ -1,3 +1,4 @@
+load("@bazel_features//:features.bzl", "bazel_features")
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
 
 def _rlocation_path(ctx, file):
@@ -143,8 +144,14 @@ BAZEL_ENV_GENRULE_TAG = "bazel_env.bzl_genrule_tag"
 
 def _extract_toolchain_info_impl(target, ctx):
     # type: (Target, ctx) -> list[Provider]
+    if not hasattr(ctx.rule.attr, "toolchains"):
+        # This is a special native rule. toolchain_type falls into this category.
+        return []
+
     if not BAZEL_ENV_GENRULE_TAG in ctx.rule.attr.tags:
-        # This is either the toolchain target we want or a toolchain_type target.
+        # This is the toolchain target itself, neither the genrule (which has the tag) nor a
+        # toolchain_type target the aspect propagated to (it has been filtered out by the
+        # check above).
         return [
             _ToolchainInfo(
                 files = target[DefaultInfo].files,
@@ -152,10 +159,14 @@ def _extract_toolchain_info_impl(target, ctx):
             ),
         ]
 
-    if not hasattr(ctx.rule.attr, "toolchains"):
-        # This is a special native rule. toolchain_type falls into this category.
-        return []
-
+    # There are two remaining cases:
+    # 1. The user specified a toolchain type in the toolchains attribute. In this case, we can look
+    #    up the resolved toolchain in the rule's toolchains. Note that aspects applied to toolchains
+    #    only see their own providers, so we can't directly read DefaultInfo and
+    #    TemplateVariableInfo from the toolchain here.
+    # 2. The user specified a resolved toolchain target in the toolchains attribute. In this case,
+    #    we also forward the aspect's provider for consistency, even though we could just read the
+    #    DefaultInfo and TemplateVariableInfo from the target directly.
     toolchain_target = ctx.rule.attr.toolchains[0]
     if toolchain_target.label in ctx.rule.toolchains:
         toolchain_target = ctx.rule.toolchains[toolchain_target.label]
@@ -165,7 +176,13 @@ def _extract_toolchain_info_impl(target, ctx):
 _extract_toolchain_info = aspect(
     implementation = _extract_toolchain_info_impl,
     attr_aspects = ["toolchains"],
-    toolchains_aspects = lambda ctx: ctx.rule.attr.toolchains.value if hasattr(ctx.rule.attr, "toolchains") else [],
+    # With Bazel <= 8, where toolchains_aspects doesn't accept a function, the aspect logic
+    # implicitly falls back to supporting resolved toolchain targets only.
+    **(
+        dict(
+            toolchains_aspects = lambda ctx: ctx.rule.attr.toolchains.value if hasattr(ctx.rule.attr, "toolchains") else [],
+        ) if bazel_features.rules.aspect_propagation_context else {}
+    )
 )
 
 def _tool_impl(ctx):
@@ -474,7 +491,7 @@ def bazel_env(*, name, tools = {}, toolchains = {}, **kwargs):
         toolchain_target_name = name + "/toolchains/" + toolchain_name
 
         # Don't pollute the toolchains directory with this helper target.
-        toolchain_genrule_name = name + ".genrule." + toolchain_name
+        toolchain_genrule_name = name + ".helper_genrule." + toolchain_name
         toolchain_targets.append(toolchain_target_name)
         toolchain_info_targets[toolchain_genrule_name] = toolchain_name
 

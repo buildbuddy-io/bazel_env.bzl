@@ -115,11 +115,12 @@ Tools available in PATH:
   * terraform:      @@rules_multitool${sep}${sep}multitool${sep}multitool//tools/terraform:terraform
 
 Toolchains available at stable relative paths:
-  * cc_toolchain: bazel-out/bazel_env-opt/bin/bazel_env/toolchains/cc_toolchain
-  * jdk:          bazel-out/bazel_env-opt/bin/bazel_env/toolchains/jdk
-  * python:       bazel-out/bazel_env-opt/bin/bazel_env/toolchains/python
-  * nodejs:       bazel-out/bazel_env-opt/bin/bazel_env/toolchains/nodejs
-  * rust:         bazel-out/bazel_env-opt/bin/bazel_env/toolchains/rust
+  * cc_toolchain:      bazel-out/bazel_env-opt/bin/bazel_env/toolchains/cc_toolchain
+  * jdk:               bazel-out/bazel_env-opt/bin/bazel_env/toolchains/jdk
+  * python:            bazel-out/bazel_env-opt/bin/bazel_env/toolchains/python
+  * nodejs:            bazel-out/bazel_env-opt/bin/bazel_env/toolchains/nodejs
+  * rust:              bazel-out/bazel_env-opt/bin/bazel_env/toolchains/rust
+  * rules_python_docs: bazel-out/bazel_env-opt/bin/bazel_env/toolchains/rules_python_docs
 
 ⚠️  Remember to run 'hash -r' in bash to update the locations of binaries on the PATH.
 "
@@ -162,3 +163,4 @@ assert_cmd_output "$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_
 assert_cmd_output "$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/toolchains/python/bin/python3 --version" "Python 3.11.8"
 assert_cmd_output "$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/toolchains/rust/bin/cargo --version" "cargo 1.80.0 (376290515 2024-07-16)"
 assert_cmd_output "$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/toolchains/rust/bin/rustc --version" "rustc 1.80.0 (051478957 2024-07-21)"
+[[ -f "$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/toolchains/rules_python_docs/extending.md" ]]

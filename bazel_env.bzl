@@ -95,12 +95,14 @@ _CPU_SETTING = "//command_line_option:cpu"
 _EXTRA_EXECUTION_PLATFORMS_SETTING = "//command_line_option:extra_execution_platforms"
 _HOST_CPU_SETTING = "//command_line_option:host_cpu"
 _HOST_PLATFORM_SETTING = "//command_line_option:host_platform"
+_PLATFORM_SUFFIX_SETTING = "//command_line_option:platform_suffix"
 _ALL_SETTINGS = [
     _COMPILATION_MODE_SETTING,
     _CPU_SETTING,
     _EXTRA_EXECUTION_PLATFORMS_SETTING,
     _HOST_CPU_SETTING,
     _HOST_PLATFORM_SETTING,
+    _PLATFORM_SUFFIX_SETTING,
 ]
 
 def _flip_output_dir_impl(settings, _attr):
@@ -115,6 +117,7 @@ def _flip_output_dir_impl(settings, _attr):
         return settings | {
             _COMPILATION_MODE_SETTING: "opt",
             _CPU_SETTING: "bazel_env",
+            _PLATFORM_SUFFIX_SETTING: "",
         }
     else:
         # Switch back to the host CPU for building tools and selecting toolchains. With Bazel 7,

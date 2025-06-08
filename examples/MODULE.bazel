@@ -11,17 +11,17 @@ local_path_override(
 
 bazel_dep(name = "aspect_rules_js", version = "2.0.0-rc4")
 bazel_dep(name = "buildifier_prebuilt", version = "7.3.1")
-bazel_dep(name = "buildozer", version = "7.1.2")
-bazel_dep(name = "rules_go", version = "0.47.1")
+bazel_dep(name = "buildozer")
+bazel_dep(name = "platforms", version = "1.0.0")
+bazel_dep(name = "rules_go")
 bazel_dep(name = "rules_java", version = "8.12.0")
 bazel_dep(name = "rules_multitool", version = "1.3.0")
 bazel_dep(name = "rules_nodejs", version = "6.1.1")
 bazel_dep(name = "rules_python", version = "1.3.0")
 bazel_dep(name = "rules_rust", version = "0.49.3")
-bazel_dep(name = "rules_shell", version = "0.4.0")
-bazel_dep(name = "platforms", version = "0.0.11")
+bazel_dep(name = "rules_shell", version = "0.4.1")
 
-# Required for compatibillity with Bazel@HEAD.
+# Required for compatibility with Bazel@HEAD.
 single_version_override(
     module_name = "buildozer",
     version = "7.1.2",
@@ -32,6 +32,20 @@ single_version_override(
     version = "7.0.2",
 )
 
+# TODO: Replace with a bazel_dep after the next release of aspect_bazel_lib.
+git_override(
+    module_name = "aspect_bazel_lib",
+    commit = "930a0601df7c6c04d5b000e39251987e57d32d57",
+    remote = "https://github.com/bazel-contrib/bazel-lib",
+)
+
+# TODO: Remove after the next release of rules_go.
+git_override(
+    module_name = "rules_go",
+    commit = "ae5ce4950fbcc7f0a0cc4b4485891c41eada395e",
+    remote = "https://github.com/bazel-contrib/rules_go",
+)
+
 register_execution_platforms(
     "//:exotic_platform",
 )
@@ -39,7 +53,7 @@ register_execution_platforms(
 # Don't update the versions below, they are only used to verify the hermeticity of bazel_env.
 
 go_sdk = use_extension("@rules_go//go:extensions.bzl", "go_sdk")
-go_sdk.download(version = "1.20.14")
+go_sdk.download(version = "1.21.13")
 
 node = use_extension("@rules_nodejs//nodejs:extensions.bzl", "node")
 node.toolchain(
@@ -92,6 +106,23 @@ http_file(
     executable = True,
     integrity = "sha256-LpzFTQpdCY4gB97OwduzxVXKL1qr3teuyQf+D/5AGqs=",
     urls = ["https://github.com/jqlang/jq/releases/download/jq-1.7/jq-win64.exe"],
+)
+
+http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
+# An example of a filegroup to be made available under a fixed path with bazel_env.
+http_archive(
+    name = "rules_python_docs",
+    build_file_content = """
+filegroup(
+    name = "rules_python_docs",
+    srcs = glob(["**/*.md"]),
+    visibility = ["//visibility:public"],
+)
+""",
+    integrity = "sha256-n587MAqSZOTHeZkxLOZjvl3umlbjYaH2/n7GDhvu+aM=",
+    strip_prefix = "rules_python-1.4.1/docs",
+    url = "https://github.com/bazel-contrib/rules_python/releases/download/1.4.1/rules_python-1.4.1.tar.gz",
 )
 
 multitool = use_extension("@rules_multitool//multitool:extension.bzl", "multitool")

@@ -137,7 +137,7 @@ case "$(arch)" in
   i386|x86_64) goarch="amd64";;
   *) goarch="$(arch)";;
 esac
-assert_cmd_output "go version" "go version go1.20.14 $(uname|tr '[:upper:]' '[:lower:]')/$goarch"
+assert_cmd_output "go version" "go version go1.21.13 $(uname|tr '[:upper:]' '[:lower:]')/$goarch"
 assert_cmd_output "jar --version" "jar 17.0.14"
 assert_cmd_output "java --version" "openjdk 17.0.14 2025-01-21 LTS"
 assert_cmd_output "jq --version" "jq-1.7"

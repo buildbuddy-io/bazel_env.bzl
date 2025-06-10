@@ -24,6 +24,9 @@ bazel_env(
         "rust": "@rules_rust//rust/toolchain:current_rust_toolchain",
         "rules_python_docs": "@rules_python_docs",
     } | (
+        # toolchain_type targets are allowed with Bazel 9.0.0-pre.20250311.1 and later.
+        # This conditional logic exists only to have the example work with any version of Bazel,
+        # it's not necessary in practice.
         {
             "go": "@rules_go//go:toolchain",
         } if _TOOLCHAIN_TYPES_SUPPORTED else {}

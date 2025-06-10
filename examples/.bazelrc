@@ -11,3 +11,8 @@ common --nobuild_runfile_links
 # TODO: Uncomment this when it no longer crashes Bazel
 # https://github.com/bazelbuild/bazel/pull/25999
 # common --extra_execution_platforms=//:exotic_platform
+
+# Test that the platform suffix still results in expected output directory for tools.
+common --enable_platform_specific_config
+common:macos --platform_suffix=mac
+common:linux --platform_suffix=linux

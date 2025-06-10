@@ -4,7 +4,10 @@ bzl_library(
     name = "bazel_env",
     srcs = ["bazel_env.bzl"],
     visibility = ["//visibility:public"],
-    deps = ["@bazel_skylib//rules:write_file"],
+    deps = [
+        "@bazel_features//:features",
+        "@bazel_skylib//rules:write_file",
+    ],
 )
 
 exports_files(
@@ -17,6 +20,5 @@ exports_files(
         "status.sh.tpl",
         "launcher.sh.tpl",
     ],
-    # TODO: Switch to private visibility once the minimum supported Bazel version is 7.1.0.
-    visibility = ["//visibility:public"],
+    visibility = ["//visibility:private"],
 )

@@ -1,4 +1,5 @@
 load("@bazel_env.bzl", "bazel_env")
+load("@bazel_features//:features.bzl", "bazel_features")
 load("@buildozer//:buildozer.bzl", "BUILDOZER_LABEL")
 load("@multitool//:tools.bzl", MULTITOOL_TOOLS = "TOOLS")
 load("@rules_python//python:py_binary.bzl", "py_binary")
@@ -8,6 +9,9 @@ load("@rules_python//python:py_library.bzl", "py_library")
 # Ignore this line for the purpose of the example.
 load("@rules_shell//shell/private:sh_test.bzl", "sh_test")
 load(":test_helpers.bzl", "REPO_NAME_SEPARATOR")
+
+# toolchain_type targets are allowed with Bazel 9.0.0-pre.20250311.1 and later.
+_TOOLCHAIN_TYPES_SUPPORTED = bazel_features.rules.aspect_propagation_context
 
 # `bazel run //:bazel_env` prints a summary and setup steps.
 bazel_env(
@@ -19,7 +23,14 @@ bazel_env(
         "nodejs": "@nodejs_toolchains//:resolved_toolchain",
         "rust": "@rules_rust//rust/toolchain:current_rust_toolchain",
         "rules_python_docs": "@rules_python_docs",
-    },
+    } | (
+        # toolchain_type targets are allowed with Bazel 9.0.0-pre.20250311.1 and later.
+        # This conditional logic exists only to have the example work with any version of Bazel,
+        # it's not necessary in practice.
+        {
+            "go": "@rules_go//go:toolchain",
+        } if _TOOLCHAIN_TYPES_SUPPORTED else {}
+    ),
     tools = {
         # Tool paths can reference the Make variables provided by toolchains.
         "bazel-cc": "$(CC)",
@@ -77,7 +88,10 @@ sh_test(
         "fake_bazel.sh",
     ],
     env = {
+        # The go command shows a warning if HOME is unset.
+        "HOME": "/tmp/user",
         "BAZEL_REPO_NAME_SEPARATOR": REPO_NAME_SEPARATOR,
+        "TOOLCHAIN_TYPES_SUPPORTED": str(_TOOLCHAIN_TYPES_SUPPORTED).lower(),
     },
     tags = [
         # The test only depends on the bazel_env fake outputs, not the individual tools.

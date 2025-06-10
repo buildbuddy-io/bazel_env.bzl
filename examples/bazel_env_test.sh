@@ -86,6 +86,12 @@ BUILD_WORKSPACE_DIRECTORY="$build_workspace_directory" \
 # shellcheck disable=SC2016
 function expected_output {
   local -r sep="$1"
+  if [ "$2" = true ]; then
+    local -r toolchain_type_toolchains="  * go:                bazel-out/bazel_env-opt/bin/bazel_env/toolchains/go
+"
+  else
+    local -r toolchain_type_toolchains=""
+  fi
   printf '%s' "
 ====== bazel_env ======
 
@@ -121,12 +127,12 @@ Toolchains available at stable relative paths:
   * nodejs:            bazel-out/bazel_env-opt/bin/bazel_env/toolchains/nodejs
   * rust:              bazel-out/bazel_env-opt/bin/bazel_env/toolchains/rust
   * rules_python_docs: bazel-out/bazel_env-opt/bin/bazel_env/toolchains/rules_python_docs
-
+${toolchain_type_toolchains}
 ⚠️  Remember to run 'hash -r' in bash to update the locations of binaries on the PATH.
 "
 }
 
-diff <(expected_output "$BAZEL_REPO_NAME_SEPARATOR") <(echo "$status_out") || exit 1
+diff <(expected_output "$BAZEL_REPO_NAME_SEPARATOR" "$TOOLCHAIN_TYPES_SUPPORTED") <(echo "$status_out") || exit 1
 
 #### Tools ####
 
@@ -159,6 +165,9 @@ assert_cmd_output "terraform --version" "Terraform v1.9.3"
 #### Toolchains ####
 
 [[ -d "$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/toolchains/cc_toolchain" ]]
+if [ "$TOOLCHAIN_TYPES_SUPPORTED" = true ]; then
+  assert_cmd_output "$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/toolchains/go/bin/go version" "go version go1.21.13 $(uname|tr '[:upper:]' '[:lower:]')/$goarch"
+fi
 assert_cmd_output "$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/toolchains/jdk/bin/java --version" "openjdk 17.0.14 2025-01-21 LTS"
 assert_cmd_output "$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/toolchains/python/bin/python3 --version" "Python 3.11.8"
 assert_cmd_output "$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/toolchains/rust/bin/cargo --version" "cargo 1.80.0 (376290515 2024-07-16)"

@@ -13,5 +13,6 @@ common --nobuild_runfile_links
 # common --extra_execution_platforms=//:exotic_platform
 
 # Test that the platform suffix still results in expected output directory for tools.
+common --enable_platform_specific_config
 common:macos --platform_suffix=mac
 common:linux --platform_suffix=linux

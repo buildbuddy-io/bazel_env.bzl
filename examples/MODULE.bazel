@@ -17,7 +17,7 @@ bazel_dep(name = "platforms", version = "1.0.0")
 bazel_dep(name = "rules_go")
 bazel_dep(name = "rules_java", version = "8.12.0")
 bazel_dep(name = "rules_multitool", version = "1.3.0")
-bazel_dep(name = "rules_nodejs", version = "6.1.1")
+bazel_dep(name = "rules_nodejs", version = "6.3.5")
 bazel_dep(name = "rules_python", version = "1.3.0")
 bazel_dep(name = "rules_rust", version = "0.49.3")
 bazel_dep(name = "rules_shell", version = "0.4.1")
@@ -33,12 +33,7 @@ single_version_override(
     version = "7.0.2",
 )
 
-# TODO: Replace with a bazel_dep after the next release of aspect_bazel_lib.
-git_override(
-    module_name = "aspect_bazel_lib",
-    commit = "930a0601df7c6c04d5b000e39251987e57d32d57",
-    remote = "https://github.com/bazel-contrib/bazel-lib",
-)
+bazel_dep(name = "aspect_bazel_lib", version = "2.19.2")
 
 # TODO: Remove after the next release of rules_go.
 git_override(

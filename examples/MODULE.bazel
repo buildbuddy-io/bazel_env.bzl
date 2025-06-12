@@ -33,12 +33,7 @@ single_version_override(
     version = "7.0.2",
 )
 
-# TODO: Replace with a bazel_dep after the next release of aspect_bazel_lib.
-git_override(
-    module_name = "aspect_bazel_lib",
-    commit = "930a0601df7c6c04d5b000e39251987e57d32d57",
-    remote = "https://github.com/bazel-contrib/bazel-lib",
-)
+bazel_dep(name = "aspect_bazel_lib", version = "2.19.2")
 
 # TODO: Remove after the next release of rules_go.
 git_override(

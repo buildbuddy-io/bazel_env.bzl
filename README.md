@@ -133,6 +133,9 @@ The target can also be executed with `bazel run` to print the list of tools and 
 > You may need to run `hash -r` or `rehash` to clear the shell's command cache.
 > `bazel run //:bazel_env` will print the command to run.
 
+You can reduce the verbosity of what direnv prints when you enter a folder, by adjusting the `log_filter` option in `~/.config/direnv/direnv.toml`.
+See https://github.com/direnv/direnv/issues/68#issuecomment-2812015043.
+
 ## Documentation
 
 See the [generated documentation](docs-gen/bazel_env.md) for more information on the `bazel_env` rule.

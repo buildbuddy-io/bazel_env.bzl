@@ -44,8 +44,9 @@ fi
 if type {{unique_name_tool}} >/dev/null 2>/dev/null; then
     echo "✅ direnv added {{bin_dir}} to PATH"
 else
-    cat << 'EOF'
-❌ {{name}}'s bin directory is not in PATH. Please follow these steps:
+    echo "❌ {{name}}'s bin directory is not in PATH. Please follow these steps:"
+    if [[ -z "{{override_resolve_steps}}" ]]; then
+        cat << 'EOF'
 
 1. Enable direnv's shell hook as described in https://direnv.net/docs/hook.html.
 
@@ -59,6 +60,9 @@ fi
 
 3. Allowlist the file with 'direnv allow .envrc'.
 EOF
+    else
+        echo "{{override_resolve_steps}}"
+    fi
     exit 1
 fi
 

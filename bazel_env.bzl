@@ -404,6 +404,7 @@ def _bazel_env_rule_impl(ctx):
                     for toolchain_info in toolchain_infos
                 ],
             ),
+            "{{override_resolve_steps}}": ctx.attr.override_resolve_steps,
         },
     )
 
@@ -426,6 +427,7 @@ _bazel_env_rule = rule(
         "toolchain_targets": attr.label_list(
             aspects = [_extract_toolchain_info],
         ),
+        "override_resolve_steps": attr.string(),
         "_status": attr.label(
             allow_single_file = True,
             cfg = "target",

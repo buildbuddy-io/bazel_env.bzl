@@ -44,21 +44,36 @@ fi
 if type {{unique_name_tool}} >/dev/null 2>/dev/null; then
     echo "✅ direnv added {{bin_dir}} to PATH"
 else
-    cat << 'EOF'
-❌ {{name}}'s bin directory is not in PATH. Please follow these steps:
+    echo "❌ {{name}}'s bin directory is not in PATH. Please follow these steps:"
 
-1. Enable direnv's shell hook as described in https://direnv.net/docs/hook.html.
+    step_num=1
+    
+    if [[ -z "${DIRENV_DIR:-}" ]]; then
+      echo ""
+      echo "$step_num. Enable direnv's shell hook as described in https://direnv.net/docs/hook.html."
+      step_num=$((step_num + 1))
+    fi
 
-2. Ensure that the following snippet is contained in a .envrc file next to your MODULE.bazel file:
+    if ! grep -qE '[[:<:]]bazel_env[[:>:]]' .envrc 2>/dev/null; then
+      echo ""
+      if [[ -f .envrc ]]; then
+        echo "$step_num. Add the following content to your existing .envrc file:"
+      else
+        echo "$step_num. Create a .envrc file next to your MODULE.bazel file with this content:"
+      fi
+      cat << 'EOF'
 
 watch_file {{bin_dir}}
 PATH_add {{bin_dir}}
 if [[ ! -d {{bin_dir}} ]]; then
   log_error "ERROR[bazel_env.bzl]: Run 'bazel run {{label}}' to regenerate {{bin_dir}}"
 fi
-
-3. Allowlist the file with 'direnv allow .envrc'.
 EOF
+      step_num=$((step_num + 1))
+    fi
+
+    echo ""
+    echo "$step_num. Run 'direnv allow' to allowlist your .envrc file."
     exit 1
 fi
 

@@ -207,6 +207,7 @@ _extract_toolchain_info = aspect(
 
 def _tool_impl(ctx):
     # type: (ctx) -> list[Provider]
+    is_windows = ctx.target_platform_has_constraint(ctx.attr._windows_constraint[platform_common.ConstraintValueInfo])
     name = ctx.label.name.rpartition("/")[-1]
     out = ctx.actions.declare_file(ctx.label.name)
 
@@ -239,7 +240,7 @@ def _tool_impl(ctx):
             extra_env = target[RunEnvironmentInfo].environment
 
     ctx.actions.expand_template(
-        template = ctx.file._launcher,
+        template = ctx.file._launcher_windows if is_windows else ctx.file._launcher,
         output = out,
         is_executable = True,
         substitutions = {
@@ -283,6 +284,13 @@ _tool = rule(
             default = ":launcher.sh.tpl",
             executable = True,
         ),
+        "_launcher_windows": attr.label(
+            allow_single_file = True,
+            cfg = _flip_output_dir,
+            default = ":launcher.bat.tpl",
+            executable = True,
+        ),
+        "_windows_constraint": attr.label(default = "@platforms//os:windows"),
     },
     executable = True,
 )

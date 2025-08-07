@@ -112,7 +112,7 @@ Toolchains available at stable relative paths:
   * jdk: bazel-out/bazel_env-opt/bin/bazel_env/toolchains/jdk
 ```
 
-### Without `direnv` (e.g., in CI)
+### Without `direnv` (e.g., in CI / Windows)
 
 Run the `print-path` subcommand of the `bazel_env` target and manually add its output to your `PATH`.
 For GitHub Actions, this can be done as follows:
@@ -139,6 +139,14 @@ The target can also be executed with `bazel run` to print the list of tools and 
 
 You can reduce the verbosity of what direnv prints when you enter a folder, by adjusting the `log_filter` option in `~/.config/direnv/direnv.toml`.
 See https://github.com/direnv/direnv/issues/68#issuecomment-2812015043.
+
+## Windows
+
+bazel_env works to prepare tools on Windows but direnv is not available; path updates
+need to be done manually.
+
+By default runfiles and symlinks are disabled on Windows; bazel_env.bzl will work fine
+regardless of these settings.
 
 ## Documentation
 

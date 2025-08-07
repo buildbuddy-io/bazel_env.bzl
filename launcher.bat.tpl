@@ -1,8 +1,17 @@
 @echo off
 setlocal enabledelayedexpansion
 
-REM Taken from
-REM https://github.com/bazelbuild/bazel/blob/73b0faff39ed435b3cbeb09c93185b155fbd3e09/scripts/bazel-complete-template.bash#L84C1-L99C2.
+if "%RUNFILES_MANIFEST_ONLY%" neq "1" (
+    echo WARNING: %%RUNFILES_MANIFEST_ONLY%% is not set; bazel issue? Forcing to 1
+    set RUNFILES_MANIFEST_ONLY=1
+)
+
+{{batch_rlocation_function}}
+
+REM Determine bin_path based on rlocation_path
+call :rlocation {{rlocation_path}} bin_path
+echo !bin_path!
+
 call :_bazel__get_workspace_path
 set BUILD_WORKSPACE_DIRECTORY=%workspace_path%
 
@@ -10,6 +19,7 @@ REM Get own path and directory
 set "own_path=%~f0"
 set "own_dir=%~dp0"
 set "own_name=%~nx0"
+set "own_name=%own_name:.bat=%"
 
 REM Remove trailing backslash from own_dir if present
 if "%own_dir:~-1%"=="\" set "own_dir=%own_dir:~0,-1%"
@@ -38,16 +48,7 @@ REM Environment of the executable target.
 
 set "BUILD_WORKING_DIRECTORY=%CD%"
 
-REM Determine bin_path based on rlocation_path
-set "rlocation_path={{rlocation_path}}"
-if "%rlocation_path:~1,1%"==":" (
-    set "bin_path=%rlocation_path%"
-) else (
-    set "bin_path=%RUNFILES_DIR%\%rlocation_path%"
-)
-
 REM Execute the target binary with all arguments
-"%bin_path%" %*
 exit /b %errorlevel%
 
 :_bazel__get_workspace_path

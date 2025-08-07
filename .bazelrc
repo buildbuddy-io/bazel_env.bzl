@@ -6,3 +6,6 @@ common --java_runtime_version=remotejdk_21
 common --java_language_version=21
 common --tool_java_runtime_version=remotejdk_21
 common --tool_java_language_version=21
+
+# Note: symlinks and runfiles disabled by default on Windows
+# bazel_env.bzl does not require either symlinks or runfiles

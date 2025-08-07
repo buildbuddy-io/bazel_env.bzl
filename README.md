@@ -148,6 +148,11 @@ need to be done manually.
 By default runfiles and symlinks are disabled on Windows; bazel_env.bzl will work fine
 regardless of these settings.
 
+```
+cd examples
+bazel test //... [currently failing]
+```
+
 ## Documentation
 
 See the [generated documentation](docs-gen/bazel_env.md) for more information on the `bazel_env` rule.

@@ -110,10 +110,9 @@ Tools available in PATH:
   * pnpm:           @pnpm
   * python:         \$(PYTHON3)
   * python_tool:    :python_tool
-  * cargo:          \$(CARGO)
-  * rustfmt:        \$(RUSTFMT)
-  * rustc:          \$(RUSTC)
-  * rustdoc:        \$(RUSTDOC)
+  * cargo:          @rules_rust//tools/upstream_wrapper:cargo
+  * rustc:          @rules_rust//tools/upstream_wrapper:rustc
+  * rustfmt:        @rules_rust//tools/upstream_wrapper:rustfmt
   * buf:            @@rules_multitool${sep}${sep}multitool${sep}multitool//tools/buf:buf
   * docker-compose: @@rules_multitool${sep}${sep}multitool${sep}multitool//tools/docker-compose:docker-compose
   * ibazel:         @@rules_multitool${sep}${sep}multitool${sep}multitool//tools/ibazel:ibazel
@@ -155,7 +154,6 @@ assert_cmd_output "python_tool" "python_tool version 0.0.1" ":$(dirname "$(which
 assert_cmd_output "cargo --version" "cargo 1.80.0 (376290515 2024-07-16)"
 assert_cmd_output "rustc --version" "rustc 1.80.0 (051478957 2024-07-21)"
 assert_cmd_output "rustfmt --version" "rustfmt 1.7.0-stable (0514789* 2024-07-21)"
-assert_cmd_output "rustdoc --version" "rustdoc 1.80.0 (051478957 2024-07-21)"
 assert_cmd_output "buf --version" "1.39.0"
 assert_cmd_output "docker-compose --version" "Docker Compose version v2.29.2"
 assert_cmd_output "ibazel" "iBazel - Version v0.25.3"

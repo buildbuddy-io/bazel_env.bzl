@@ -45,10 +45,9 @@ bazel_env(
         "pnpm": "@pnpm",
         "python": "$(PYTHON3)",
         "python_tool": ":python_tool",
-        "cargo": "$(CARGO)",
-        "rustfmt": "$(RUSTFMT)",
-        "rustc": "$(RUSTC)",
-        "rustdoc": "$(RUSTDOC)",
+        "cargo": "@rules_rust//tools/upstream_wrapper:cargo",
+        "rustc": "@rules_rust//tools/upstream_wrapper:rustc",
+        "rustfmt": "@rules_rust//tools/upstream_wrapper:rustfmt",
     } | MULTITOOL_TOOLS,
 )
 

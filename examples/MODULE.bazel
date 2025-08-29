@@ -122,5 +122,12 @@ filegroup(
 )
 
 multitool = use_extension("@rules_multitool//multitool:extension.bzl", "multitool")
-multitool.hub(lockfile = "//:tools.lock.json")
-use_repo(multitool, "multitool")
+
+# Avoid other multitool.hub registrations contributing to the bazel_env since we eager-fetch all of them.
+# See https://github.com/buildbuddy-io/bazel_env.bzl/issues/61
+# and search for "multiple multitool hubs to group related tools together" on
+# https://github.com/bazel-contrib/rules_multitool#bazel-module-usage
+multitool.hub(hub_name = "bazel_env_tools", lockfile = "//:bazel_env.lock.json")
+use_repo(multitool, "bazel_env_tools")
+
+register_toolchains("@bazel_env_tools//toolchains:all")

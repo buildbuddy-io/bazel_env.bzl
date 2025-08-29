@@ -1,7 +1,7 @@
 load("@bazel_env.bzl", "bazel_env")
+load("@bazel_env_tools//:tools.bzl", DOWNLOADED_TOOLS = "TOOLS")
 load("@bazel_features//:features.bzl", "bazel_features")
 load("@buildozer//:buildozer.bzl", "BUILDOZER_LABEL")
-load("@multitool//:tools.bzl", MULTITOOL_TOOLS = "TOOLS")
 load("@rules_python//python:py_binary.bzl", "py_binary")
 load("@rules_python//python:py_library.bzl", "py_library")
 
@@ -49,7 +49,7 @@ bazel_env(
         "rustfmt": "$(RUSTFMT)",
         "rustc": "$(RUSTC)",
         "rustdoc": "$(RUSTDOC)",
-    } | MULTITOOL_TOOLS,
+    } | DOWNLOADED_TOOLS,
 )
 
 alias(

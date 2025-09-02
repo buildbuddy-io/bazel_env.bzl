@@ -6,6 +6,10 @@ This allows all developers to share the same tool versions as used in the Bazel 
 `bazel_env` relies on the [`direnv`](https://direnv.net/) tool to automatically set up `PATH` when entering the project directory.
 When you run the `bazel_env` target, it will print instructions on how to set up `direnv` and its `.envrc` file.
 
+🎙️ This rule was featured on the Aspect Insights podcast:
+
+[![Developer Tooling in Monorepos with bazel_env ](https://img.youtube.com/vi/TDyUvaXaZrc/0.jpg)](https://www.youtube.com/watch?v=TDyUvaXaZrc&list=PLLU28e_DRwdtpojOqWM5UeFyxad7m9gCF&index=1)
+
 ## Example
 
 The [example](examples/) includes some commonly used tools and toolchains.

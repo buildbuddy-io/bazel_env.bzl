@@ -17,7 +17,7 @@ _TOOLCHAIN_TYPES_SUPPORTED = bazel_features.rules.aspect_propagation_context
 bazel_env(
     name = "bazel_env",
     toolchains = {
-        "cc_toolchain": "@bazel_tools//tools/cpp:current_cc_toolchain",
+        # "cc_toolchain": "@bazel_tools//tools/cpp:current_cc_toolchain",
         "jdk": "@rules_java//toolchains:current_host_java_runtime",
         "python": "@rules_python//python:current_py_toolchain",
         "nodejs": "@nodejs_toolchains//:resolved_toolchain",
@@ -33,7 +33,7 @@ bazel_env(
     ),
     tools = {
         # Tool paths can reference the Make variables provided by toolchains.
-        "bazel-cc": "$(CC)",
+        # "bazel-cc": "$(CC)",
         # Tools can also be specified as labels.
         "buildifier": "@buildifier_prebuilt//:buildifier",
         "buildozer": BUILDOZER_LABEL,
@@ -97,6 +97,37 @@ sh_test(
         "external",
         # The test cd's into the workspace directory and expects the bazel_env to be present.
         "local",
+    ],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
+)
+
+sh_test(
+    name = "bazel_env_test_windows",
+    srcs = ["bazel_env_test_windows.sh"],
+    data = [
+        # Used to cd into the workspace directory.
+        "MODULE.bazel",
+        # Enforces that the bazel_env has been built.
+        ":bazel_env",
+        # Replaces "bazel" in the test script.
+        "fake_bazel.sh",
+    ],
+    env = {
+        # The go command shows a warning if HOME is unset.
+        "HOME": "/tmp/user",
+        "BAZEL_REPO_NAME_SEPARATOR": REPO_NAME_SEPARATOR,
+        "TOOLCHAIN_TYPES_SUPPORTED": str(_TOOLCHAIN_TYPES_SUPPORTED).lower(),
+    },
+    tags = [
+        # The test only depends on the bazel_env fake outputs, not the individual tools.
+        "external",
+        # The test cd's into the workspace directory and expects the bazel_env to be present.
+        "local",
+    ],
+    target_compatible_with = [
+        "@platforms//os:windows",
     ],
 )
 

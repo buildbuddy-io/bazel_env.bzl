@@ -2,7 +2,7 @@
 setlocal enabledelayedexpansion
 
 if "%RUNFILES_MANIFEST_ONLY%" neq "1" (
-    echo WARNING: %%RUNFILES_MANIFEST_ONLY%% is not set; bazel issue? Forcing to 1
+    @rem echo WARNING: %%RUNFILES_MANIFEST_ONLY%% is not set; bazel issue? Forcing to 1
     set RUNFILES_MANIFEST_ONLY=1
 )
 
@@ -10,7 +10,7 @@ if "%RUNFILES_MANIFEST_ONLY%" neq "1" (
 
 REM Determine bin_path based on rlocation_path
 call :rlocation {{rlocation_path}} bin_path
-echo !bin_path!
+set bin_path=%bin_path:/=\%
 
 call :_bazel__get_workspace_path
 set BUILD_WORKSPACE_DIRECTORY=%workspace_path%
@@ -49,6 +49,7 @@ REM Environment of the executable target.
 set "BUILD_WORKING_DIRECTORY=%CD%"
 
 REM Execute the target binary with all arguments
+%bin_path% %*
 exit /b %errorlevel%
 
 :_bazel__get_workspace_path

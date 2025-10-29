@@ -10,7 +10,7 @@ local_path_override(
 )
 
 bazel_dep(name = "aspect_rules_js", version = "2.0.0-rc4")
-bazel_dep(name = "bazel_features", version = "1.31.0")
+bazel_dep(name = "bazel_features", version = "1.33.0")
 bazel_dep(name = "buildifier_prebuilt", version = "7.3.1")
 bazel_dep(name = "buildozer")
 bazel_dep(name = "platforms", version = "1.0.0")

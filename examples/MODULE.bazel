@@ -14,7 +14,7 @@ bazel_dep(name = "bazel_features", version = "1.33.0")
 bazel_dep(name = "buildifier_prebuilt", version = "7.3.1")
 bazel_dep(name = "buildozer")
 bazel_dep(name = "platforms", version = "1.0.0")
-bazel_dep(name = "rules_go")
+bazel_dep(name = "rules_go", version = "0.58.3")
 bazel_dep(name = "rules_java", version = "8.16.1")
 bazel_dep(name = "rules_multitool", version = "1.3.0")
 bazel_dep(name = "rules_nodejs", version = "6.3.5")
@@ -34,13 +34,6 @@ single_version_override(
 )
 
 bazel_dep(name = "aspect_bazel_lib", version = "2.19.2")
-
-# TODO: Remove after the next release of rules_go.
-git_override(
-    module_name = "rules_go",
-    commit = "0aa693db647ef99eeaf020cddd7ba967139be1c4",
-    remote = "https://github.com/bazel-contrib/rules_go",
-)
 
 register_execution_platforms(
     "//:exotic_platform",

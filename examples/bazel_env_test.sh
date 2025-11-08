@@ -144,7 +144,7 @@ case "$(arch)" in
 esac
 assert_cmd_output "go version" "go version go1.21.13 $(uname|tr '[:upper:]' '[:lower:]')/$goarch"
 assert_cmd_output "jar --version" "jar 17.0.17"
-assert_cmd_output "java --version" "openjdk 17.0.17 2025-01-21 LTS"
+assert_cmd_output "java --version" "openjdk 17.0.17 2025-10-21 LTS"
 assert_cmd_output "jq --version" "jq-1.7"
 assert_cmd_output "node --version" "v16.18.1"
 assert_cmd_output "pnpm --version" "8.6.7"

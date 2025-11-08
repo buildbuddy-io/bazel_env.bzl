@@ -21,7 +21,7 @@ The [example](examples/) includes some commonly used tools and toolchains.
 1. Add a dependency on `bazel_env.bzl` to your `MODULE.bazel` file:
 
 ```starlark
-bazel_dep(name = "bazel_env.bzl", version = "0.1.0", dev_dependency = True)
+bazel_dep(name = "bazel_env.bzl", version = "...", dev_dependency = True)
 ```
 
 2. Add a `bazel_env` target to a `BUILD.bazel` file (e.g. top-level or in a `tools` directory):

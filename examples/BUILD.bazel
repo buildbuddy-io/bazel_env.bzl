@@ -49,6 +49,17 @@ bazel_env(
         "rustc": "@rules_rust//tools/upstream_wrapper:rustc",
         "rustfmt": "@rules_rust//tools/upstream_wrapper:rustfmt",
     } | MULTITOOL_TOOLS,
+    watch_dirs = {
+        "jq": [
+            "jq-dir",
+        ],
+    },
+    watch_files = {
+        "python_tool": [
+            "python_tool.py",
+            "python_tool_lib.py",
+        ],
+    }
 )
 
 alias(

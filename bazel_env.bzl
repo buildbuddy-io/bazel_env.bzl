@@ -348,7 +348,7 @@ def _bazel_env_rule_impl(ctx):
     # It is not necessary to stage the toolchain files (which are in runfiles) as inputs as their
     # repos have already been fetched before the toolchain rules were analyzed.
     transitive_inputs = [toolchain[DefaultInfo].files for toolchain in ctx.attr.toolchain_targets]
-    direct_inputs = [unique_name_tool, ctx.file.all_tools_file]
+    direct_inputs = [unique_name_tool, ctx.file.all_tools_file] + ctx.files.tool_dirs + ctx.files.tool_files
     tools = [tool[DefaultInfo].files_to_run for tool in ctx.attr.tool_targets]
     ctx.actions.run_shell(
         outputs = [implicit_out],
@@ -377,7 +377,12 @@ def _bazel_env_rule_impl(ctx):
     toolchain_name_pad = max([len(toolchain_info.name) for toolchain_info in toolchain_infos] + [0])
 
     status_script = ctx.actions.declare_file(ctx.label.name + ".sh")
-    tool_regex = "\\|".join([tool_info.name for tool_info in tool_infos] + [unique_name_tool.basename, ctx.file.all_tools_file.basename])
+    tool_regex = "\\|".join(
+        [tool_info.name for tool_info in tool_infos] +
+        [unique_name_tool.basename, ctx.file.all_tools_file.basename] +
+        [dir.basename for dir in ctx.files.tool_dirs] +
+        [file.basename for file in ctx.files.tool_files],
+    )
     ctx.actions.expand_template(
         template = ctx.file._status,
         output = status_script,
@@ -419,6 +424,8 @@ _bazel_env_rule = rule(
     implementation = _bazel_env_rule_impl,
     attrs = {
         "all_tools_file": attr.label(allow_single_file = True),
+        "tool_dirs": attr.label_list(allow_files = True),
+        "tool_files": attr.label_list(allow_files = True),
         "unique_name_tool": attr.label(),
         "tool_targets": attr.label_list(
             providers = [_ToolInfo],
@@ -438,7 +445,7 @@ _bazel_env_rule = rule(
 
 _FORBIDDEN_TOOL_NAMES = ["direnv", "bazel", "bazelisk"]
 
-def bazel_env(*, name, tools = {}, toolchains = {}, **kwargs):
+def bazel_env(*, name, tools = {}, toolchains = {}, watch_dirs = {}, watch_files = {}, **kwargs):
     # type: (string, dict[string, string | Label], dict[string, string | Label]) -> None
     """Makes Bazel-managed tools and toolchains available under stable paths.
 
@@ -565,6 +572,33 @@ def bazel_env(*, name, tools = {}, toolchains = {}, **kwargs):
             tags = ["manual"],
         )
 
+    tool_dirs = []
+    tool_files = []
+    common = "_common"
+
+    if common in watch_dirs:
+        watch_dirs_file = name + "/bin/_{}_watch_dirs".format(common)
+        write_file(
+            name = watch_dirs_file,
+            out = watch_dirs_file + ".txt",
+            content = [" " + " ".join(watch_dirs[common]) + " "],
+            is_executable = False,
+            visibility = ["//visibility:private"],
+            tags = ["manual"],
+        )
+        tool_dirs.append(watch_dirs_file)
+    if common in watch_files:
+        watch_files_file = name + "/bin/_{}_watch_files".format(common)
+        write_file(
+            name = watch_files_file,
+            out = watch_files_file + ".txt",
+            content = [" " + " ".join(watch_files[common]) + " "],
+            is_executable = False,
+            visibility = ["//visibility:private"],
+            tags = ["manual"],
+        )
+        tool_files.append(watch_files_file)
+
     for tool_name, tool in tools.items():
         if not tool_name:
             fail("empty tool names are not allowed")
@@ -589,10 +623,34 @@ def bazel_env(*, name, tools = {}, toolchains = {}, **kwargs):
             tags = ["manual"],
             **tool_kwargs
         )
+        if tool_name in watch_dirs:
+            watch_dirs_file = name + "/bin/_{}_watch_dirs".format(tool_name)
+            write_file(
+                name = watch_dirs_file,
+                out = watch_dirs_file + ".txt",
+                content = [" " + " ".join(watch_dirs[tool_name]) + " "],
+                is_executable = False,
+                visibility = ["//visibility:private"],
+                tags = ["manual"],
+            )
+            tool_dirs.append(watch_dirs_file)
+        if tool_name in watch_files:
+            watch_files_file = name + "/bin/_{}_watch_files".format(tool_name)
+            write_file(
+                name = watch_files_file,
+                out = watch_files_file + ".txt",
+                content = [" " + " ".join(watch_files[tool_name]) + " "],
+                is_executable = False,
+                visibility = ["//visibility:private"],
+                tags = ["manual"],
+            )
+            tool_files.append(watch_files_file)
 
     _bazel_env_rule(
         name = name,
         all_tools_file = all_tools_file,
+        tool_dirs = tool_dirs,
+        tool_files = tool_files,
         unique_name_tool = unique_name_tool,
         tool_targets = tool_targets,
         toolchain_targets = toolchain_targets,

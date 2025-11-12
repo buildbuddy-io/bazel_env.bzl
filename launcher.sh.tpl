@@ -32,6 +32,59 @@ if ! grep -q -F "$own_name" "$own_dir/_all_tools.txt"; then
   exit 1
 fi
 
+workspace_path="$(_bazel__get_workspace_path)"
+lock_file="$workspace_path/bazel_env.lock"
+
+if [[ ! -f "$lock_file" ]]; then
+  touch "$lock_file"
+fi
+
+files_to_watch=()
+
+if [[ -f "${own_dir}/__common_watch_dirs.txt" ]]; then
+  for dir in $(cat "${own_dir}/__common_watch_dirs.txt"); do
+    for file in $(find "$workspace_path/$dir" -type f); do
+      files_to_watch+=("$file")
+    done
+  done
+fi
+
+if [[ -f "${own_dir}/__common_watch_files.txt" ]]; then
+  for file in $(cat "${own_dir}/__common_watch_files.txt"); do
+    files_to_watch+=("$workspace_path/$file")
+  done
+fi
+
+if [[ -f "${own_dir}/_${own_name}_watch_dirs.txt" ]]; then
+  for dir in $(cat "${own_dir}/_${own_name}_watch_dirs.txt"); do
+    for file in $(find "$workspace_path/$dir" -type f); do
+      files_to_watch+=("$file")
+    done
+  done
+fi
+
+if [[ -f "${own_dir}/_${own_name}_watch_files.txt" ]]; then
+  for file in $(cat "${own_dir}/_${own_name}_watch_files.txt"); do
+    files_to_watch+=("$workspace_path/$file")
+  done
+fi
+
+if grep -F -f <(printf "%s\n" "${files_to_watch[@]}") "$lock_file" | sha256sum -c --status -; then
+  rebuild_env=False
+else
+  tmp=$(mktemp)
+  trap 'rm -f "$tmp"' EXIT INT TERM
+  grep -vF -f <(printf "%s\n" "${files_to_watch[@]}") "$lock_file" > "$tmp" || true
+  sha256sum "${files_to_watch[@]}" >> "$tmp"
+  mv "$tmp" "$lock_file"
+  rebuild_env=True
+fi
+
+if [[ $rebuild_env == True && "${BAZEL_ENV_INTERNAL_EXEC:-False}" != True ]]; then
+  "${BAZEL:-bazel}" build {{bazel_env_label}}
+  BAZEL_ENV_INTERNAL_EXEC=True exec "$own_path" "$@"
+fi
+
 # Set up an environment similar to 'bazel run' to support tools designed to be
 # run with it.
 # Since tools may cd into BUILD_WORKSPACE_DIRECTORY, ensure that RUNFILES_DIR
@@ -50,7 +103,7 @@ export JS_BINARY__NO_CD_BINDIR=1
 BUILD_WORKING_DIRECTORY="$(pwd)"
 export BUILD_WORKING_DIRECTORY
 
-BUILD_WORKSPACE_DIRECTORY="$(_bazel__get_workspace_path)"
+BUILD_WORKSPACE_DIRECTORY="$workspace_path"
 export BUILD_WORKSPACE_DIRECTORY
 
 case "{{rlocation_path}}" in

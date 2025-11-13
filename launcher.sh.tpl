@@ -33,12 +33,6 @@ if ! grep -q -F "$own_name" "$own_dir/_all_tools.txt"; then
 fi
 
 workspace_path="$(_bazel__get_workspace_path)"
-lock_file="$workspace_path/bazel_env.lock"
-
-if [[ ! -f "$lock_file" ]]; then
-  touch "$lock_file"
-fi
-
 files_to_watch=()
 
 if [[ -f "${own_dir}/__common_watch_dirs.txt" ]]; then
@@ -69,15 +63,56 @@ if [[ -f "${own_dir}/_${own_name}_watch_files.txt" ]]; then
   done
 fi
 
-if grep -F -f <(printf "%s\n" "${files_to_watch[@]}") "$lock_file" | sha256sum -c --status -; then
-  rebuild_env=False
-else
-  tmp=$(mktemp)
-  trap 'rm -f "$tmp"' EXIT INT TERM
-  grep -vF -f <(printf "%s\n" "${files_to_watch[@]}") "$lock_file" > "$tmp" || true
-  sha256sum "${files_to_watch[@]}" >> "$tmp"
-  mv "$tmp" "$lock_file"
-  rebuild_env=True
+rebuild_env=False
+
+if [[ ${#files_to_watch[@]} -gt 0 ]]; then
+  lock_file="$workspace_path/bazel_env.lock"
+
+  if [[ ! -f "$lock_file" ]]; then
+    touch "$lock_file"
+  fi
+
+  matched_lines=$(awk '
+    NR==FNR { files[$0]=1; next }
+    {
+      # Extract filepath (everything after first two spaces)
+      match($0, /^[^ ]+ +/)
+      filepath = substr($0, RSTART + RLENGTH)
+      if (filepath in files) print
+    }
+  ' <(printf "%s\n" "${files_to_watch[@]}") "$lock_file" 2>/dev/null || true)
+
+  if [[ -n "$matched_lines" ]]; then
+    matched_count=$(echo "$matched_lines" | wc -l)
+  else
+    matched_count=0
+  fi
+
+  if [[ $matched_count -eq ${#files_to_watch[@]} ]]; then
+    if echo "$matched_lines" | sha256sum -c --status - 2>/dev/null; then
+      rebuild_env=False
+    else
+      rebuild_env=True
+    fi
+  else
+    rebuild_env=True
+  fi
+
+  if [[ $rebuild_env == True ]]; then
+    tmp=$(mktemp)
+    trap 'rm -f "$tmp"' EXIT INT TERM
+    awk '
+      NR==FNR { files[$0]=1; next }
+      {
+        # Extract filepath (everything after first two spaces)
+        match($0, /^[^ ]+ +/)
+        filepath = substr($0, RSTART + RLENGTH)
+        if (!(filepath in files)) print
+      }
+    ' <(printf "%s\n" "${files_to_watch[@]}") "$lock_file" > "$tmp" 2>/dev/null || true
+    sha256sum "${files_to_watch[@]}" >> "$tmp"
+    mv "$tmp" "$lock_file"
+  fi
 fi
 
 if [[ $rebuild_env == True && "${BAZEL_ENV_INTERNAL_EXEC:-False}" != True ]]; then

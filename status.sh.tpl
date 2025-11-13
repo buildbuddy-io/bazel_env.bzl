@@ -33,6 +33,10 @@ cat << 'EOF'
 
 EOF
 
+if [[ {{generate_lockfile}} == True ]]; then
+touch "$BUILD_WORKSPACE_DIRECTORY/bazel_env.lock"
+fi
+
 if [[ {{has_tools}} == True ]]; then
 
 if type direnv >/dev/null 2>/dev/null; then

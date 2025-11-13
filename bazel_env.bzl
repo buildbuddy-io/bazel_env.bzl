@@ -409,6 +409,7 @@ def _bazel_env_rule_impl(ctx):
                     for toolchain_info in toolchain_infos
                 ],
             ),
+            "{{generate_lockfile}}": str(len(ctx.files.tool_dirs) > 0 or len(ctx.files.tool_files) > 0),
         },
     )
 

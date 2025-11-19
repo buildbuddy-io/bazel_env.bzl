@@ -90,7 +90,7 @@ if [[ ${#files_to_watch[@]} -gt 0 ]]; then
   fi
 
   if [[ $matched_count -eq ${#files_to_watch[@]} ]]; then
-    if echo "$matched_lines" | "$sha256_cmd" -c --status - 2>/dev/null; then
+    if echo "$matched_lines" | $sha256_cmd -c --status - 2>/dev/null; then
       rebuild_env=False
     else
       rebuild_env=True
@@ -111,7 +111,7 @@ if [[ ${#files_to_watch[@]} -gt 0 ]]; then
         if (!(filepath in files)) print
       }
     ' <(printf "%s\n" "${files_to_watch[@]}") "$lock_file" > "$tmp" 2>/dev/null || true
-    "$sha256_cmd" "${files_to_watch[@]}" >> "$tmp"
+    $sha256_cmd "${files_to_watch[@]}" >> "$tmp"
     mv "$tmp" "$lock_file"
   fi
 fi

@@ -98,26 +98,23 @@ if [[ ${#files_to_watch[@]} -gt 0 ]]; then
   else
     rebuild_env=True
   fi
-
-  if [[ $rebuild_env == True ]]; then
-    tmp=$(mktemp)
-    trap 'rm -f "$tmp"' EXIT INT TERM
-    awk '
-      NR==FNR { files[$0]=1; next }
-      {
-        # Extract filepath (everything after first two spaces)
-        match($0, /^[^ ]+ +/)
-        filepath = substr($0, RSTART + RLENGTH)
-        if (!(filepath in files)) print
-      }
-    ' <(printf "%s\n" "${files_to_watch[@]}") "$lock_file" > "$tmp" 2>/dev/null || true
-    $sha256_cmd "${files_to_watch[@]}" >> "$tmp"
-    mv "$tmp" "$lock_file"
-  fi
 fi
 
 if [[ $rebuild_env == True && "${BAZEL_ENV_INTERNAL_EXEC:-False}" != True ]]; then
   "${BAZEL:-bazel}" build {{bazel_env_label}}
+  tmp=$(mktemp)
+  trap 'rm -f "$tmp"' EXIT INT TERM
+  awk '
+    NR==FNR { files[$0]=1; next }
+    {
+      # Extract filepath (everything after first two spaces)
+      match($0, /^[^ ]+ +/)
+      filepath = substr($0, RSTART + RLENGTH)
+      if (!(filepath in files)) print
+    }
+  ' <(printf "%s\n" "${files_to_watch[@]}") "$lock_file" > "$tmp" 2>/dev/null || true
+  $sha256_cmd "${files_to_watch[@]}" >> "$tmp"
+  mv "$tmp" "$lock_file"
   BAZEL_ENV_INTERNAL_EXEC=True exec "$own_path" "$@"
 fi
 

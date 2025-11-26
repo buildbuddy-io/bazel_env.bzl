@@ -45,7 +45,9 @@ fi
 
 if [[ -f "${own_dir}/__common_watch_files.txt" ]]; then
   for file in $(cat "${own_dir}/__common_watch_files.txt"); do
-    files_to_watch+=("$workspace_path/$file")
+    if [[ -f "$workspace_path/$file" ]]; then
+      files_to_watch+=("$workspace_path/$file")
+    fi
   done
 fi
 
@@ -59,7 +61,9 @@ fi
 
 if [[ -f "${own_dir}/_${own_name}_watch_files.txt" ]]; then
   for file in $(cat "${own_dir}/_${own_name}_watch_files.txt"); do
-    files_to_watch+=("$workspace_path/$file")
+    if [[ -f "$workspace_path/$file" ]]; then
+      files_to_watch+=("$workspace_path/$file")
+    fi
   done
 fi
 

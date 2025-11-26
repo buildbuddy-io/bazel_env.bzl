@@ -30,7 +30,13 @@ function assert_cmd_output() {
     exit 1
   fi
 
-  local -r actual_first_line="$(echo "$full_output" | head -n 1)"
+  if [[ "$(printf '%s\n' "$full_output" | sed -n '1p')" == "Fake Bazel stdout" &&
+        "$(printf '%s\n' "$full_output" | sed -n '2p')" == "Fake Bazel stderr" ]]; then
+    cleaned_output="$(printf '%s\n' "$full_output" | tail -n +3)"
+  else
+    cleaned_output="$full_output"
+  fi
+  local -r actual_first_line="$(echo "$cleaned_output" | head -n 1)"
   # Allow for wildcard matching and print a diff if the output doesn't match.
   # shellcheck disable=SC2053
   if [[ $actual_first_line == $expected_first_line ]]; then

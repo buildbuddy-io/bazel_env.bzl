@@ -125,7 +125,9 @@ $ bazel run //:bazel_env print-path >> $GITHUB_PATH
 
 [`rules_multitool`](https://github.com/theoremlp/rules_multitool) makes it easy to fetch tool binaries that match the host machine's architecture and OS and conveniently integrates with your `bazel_env` targets.
 If you define a multitool hub called `multitool`, just `load` the `TOOLS` dict from `@multitool//:tools.bzl` and append it to the `tools` attribute of your `bazel_env` target via `|`.
-The [example](examples/) demonstrates a use of `rules_multitool` to fetch tools such as `docker-compose` and `terraform`.
+Note that due to [#14](https://github.com/buildbuddy-io/bazel_env.bzl/issues/14), all multitool declarations in *any* Bazel module will be eagerly downloaded and added to the PATH.
+You may wish to choose a subset of the tools rather than appending the entire dictionary.
+The [example](examples/) demonstrates a use of `rules_multitool` to fetch tools, and selects `ibazel` and `terraform` to add to the PATH.
 
 ## Usage
 

@@ -206,7 +206,6 @@ _extract_toolchain_info = aspect(
 )
 
 _SHA256SUM_TOOLCHAIN_TYPE = "@rules_coreutils//coreutils/toolchain/sha256sum:type"
-#_AWK_TOOLCHAIN_TYPE = "@rules_coreutils//coreutils/toolchain/awk:type"
 
 def _tool_impl(ctx):
     # type: (ctx) -> list[Provider]
@@ -242,7 +241,6 @@ def _tool_impl(ctx):
             extra_env = target[RunEnvironmentInfo].environment
 
     sha256sum = ctx.toolchains[_SHA256SUM_TOOLCHAIN_TYPE]
-    #awk = ctx.toolchains[_AWK_TOOLCHAIN_TYPE]
 
     runfiles = runfiles.merge(sha256sum.default.default_runfiles)
 
@@ -294,10 +292,7 @@ _tool = rule(
         ),
     },
     executable = True,
-    toolchains = [
-        _SHA256SUM_TOOLCHAIN_TYPE,
-        #_AWK_TOOLCHAIN_TYPE,
-    ],
+    toolchains = [_SHA256SUM_TOOLCHAIN_TYPE],
 )
 
 def _toolchain_impl(ctx):

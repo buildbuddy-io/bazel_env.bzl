@@ -205,6 +205,9 @@ _extract_toolchain_info = aspect(
     )
 )
 
+_SHA256SUM_TOOLCHAIN_TYPE = "@rules_coreutils//coreutils/toolchain/sha256sum:type"
+#_AWK_TOOLCHAIN_TYPE = "@rules_coreutils//coreutils/toolchain/awk:type"
+
 def _tool_impl(ctx):
     # type: (ctx) -> list[Provider]
     name = ctx.label.name.rpartition("/")[-1]
@@ -238,6 +241,11 @@ def _tool_impl(ctx):
         if RunEnvironmentInfo in target:
             extra_env = target[RunEnvironmentInfo].environment
 
+    sha256sum = ctx.toolchains[_SHA256SUM_TOOLCHAIN_TYPE]
+    #awk = ctx.toolchains[_AWK_TOOLCHAIN_TYPE]
+
+    runfiles = runfiles.merge(sha256sum.default.default_runfiles)
+
     ctx.actions.expand_template(
         template = ctx.file._launcher,
         output = out,
@@ -245,6 +253,7 @@ def _tool_impl(ctx):
         substitutions = {
             "{{bazel_env_label}}": str(ctx.label).removeprefix("@@").removesuffix("/bin/" + name),
             "{{rlocation_path}}": rlocation_path,
+            "{{sha256sum_rlocation_path}}": _rlocation_path(ctx, sha256sum.run.executable),
             "{{extra_env}}": "\n".join([
                 "export {}={}".format(k, repr(v))
                 for k, v in extra_env.items()
@@ -285,6 +294,10 @@ _tool = rule(
         ),
     },
     executable = True,
+    toolchains = [
+        _SHA256SUM_TOOLCHAIN_TYPE,
+        #_AWK_TOOLCHAIN_TYPE,
+    ],
 )
 
 def _toolchain_impl(ctx):
@@ -445,29 +458,29 @@ _bazel_env_rule = rule(
 
 _FORBIDDEN_TOOL_NAMES = ["direnv", "bazel", "bazelisk"]
 
-def _write_watch_dirs(tool_name, dirs):
-    file = name + "/bin/_{}_watch_dirs".format(tool_name)
+def _write_watch_dirs(name, tool_name, dirs):
+    watch_file = name + "/bin/_{}_watch_dirs".format(tool_name)
     write_file(
-        name = file,
-        out = file + ".txt",
+        name = watch_file,
+        out = watch_file + ".txt",
         content = [" " + " ".join(dirs) + " "],
         is_executable = False,
         visibility = ["//visibility:private"],
         tags = ["manual"],
     )
-    return file
+    return watch_file
 
-def _write_watch_files(tool_name, files):
-    file = name + "/bin/_{}_watch_files".format(tool_name)
+def _write_watch_files(name, tool_name, files):
+    watch_file = name + "/bin/_{}_watch_files".format(tool_name)
     write_file(
-        name = file,
-        out = file + ".txt",
+        name = watch_file,
+        out = watch_file + ".txt",
         content = [" " + " ".join(files) + " "],
         is_executable = False,
         visibility = ["//visibility:private"],
         tags = ["manual"],
     )
-    return file
+    return watch_file
 
 def bazel_env(*, name, tools = {}, toolchains = {}, watch_dirs = {}, watch_files = {}, **kwargs):
     # type: (string, dict[string, string | Label], dict[string, string | Label]) -> None
@@ -601,9 +614,9 @@ def bazel_env(*, name, tools = {}, toolchains = {}, watch_dirs = {}, watch_files
     common = "_common"
 
     if common in watch_dirs:
-        tool_dirs.append(_write_watch_dirs(common, watch_dirs[common]))
+        tool_dirs.append(_write_watch_dirs(name, common, watch_dirs[common]))
     if common in watch_files:
-        tool_files.append(_write_watch_files(common, watch_files[common]))
+        tool_files.append(_write_watch_files(name, common, watch_files[common]))
 
     for tool_name, tool in tools.items():
         if not tool_name:
@@ -630,9 +643,9 @@ def bazel_env(*, name, tools = {}, toolchains = {}, watch_dirs = {}, watch_files
             **tool_kwargs
         )
         if tool_name in watch_dirs:
-            tool_dirs.append(_write_watch_dirs(tool_name, watch_dirs[tool_name]))
+            tool_dirs.append(_write_watch_dirs(name, tool_name, watch_dirs[tool_name]))
         if tool_name in watch_files:
-            tool_files.append(_write_watch_files(tool_name, watch_files[tool_name]))
+            tool_files.append(_write_watch_files(name, tool_name, watch_files[tool_name]))
 
     _bazel_env_rule(
         name = name,

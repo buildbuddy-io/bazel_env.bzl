@@ -68,7 +68,7 @@ if [[ -f "${own_dir}/_${own_name}_watch_files.txt" ]]; then
 fi
 
 rebuild_env=False
-sha256_cmd=$(command -v sha256sum &> /dev/null && echo "sha256sum" || echo "shasum -a 256")
+sha256_cmd="${own_path}.runfiles/{{sha256sum_rlocation_path}}"
 
 if [[ ${#files_to_watch[@]} -gt 0 ]]; then
   lock_file="$workspace_path/bazel_env.lock"

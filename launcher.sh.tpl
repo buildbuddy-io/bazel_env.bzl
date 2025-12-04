@@ -80,7 +80,6 @@ if [[ ${#files_to_watch[@]} -gt 0 ]]; then
   matched_lines=$(awk '
     NR==FNR { files[$0]=1; next }
     {
-      # Extract filepath (everything after first two spaces)
       match($0, /^[^ ]+ +/)
       filepath = substr($0, RSTART + RLENGTH)
       if (filepath in files) print
@@ -94,7 +93,7 @@ if [[ ${#files_to_watch[@]} -gt 0 ]]; then
   fi
 
   if [[ $matched_count -eq ${#files_to_watch[@]} ]]; then
-    if echo "$matched_lines" | $sha256_cmd -c --status - 2>/dev/null; then
+    if echo "$matched_lines" | "$sha256_cmd" -c --status - 2>/dev/null; then
       rebuild_env=False
     else
       rebuild_env=True
@@ -105,19 +104,41 @@ if [[ ${#files_to_watch[@]} -gt 0 ]]; then
 fi
 
 if [[ $rebuild_env == True && "${BAZEL_ENV_INTERNAL_EXEC:-False}" != True ]]; then
+  echo "Detected changes in watched files, rebuilding bazel_env..." >&2
+  if [[ ${#files_to_watch[@]} -gt 0 ]]; then
+    echo "Changed files:" >&2
+    for file in "${files_to_watch[@]}"; do
+      if [[ -f "$file" ]]; then
+        matched_line=$(awk -v file="$file" '
+          {
+            match($0, /^[^ ]+ +/)
+            filepath = substr($0, RSTART + RLENGTH)
+            if (filepath == file) print
+          }
+        ' "$lock_file" 2>/dev/null || true)
+
+        if [[ -n "$matched_line" ]]; then
+          if ! echo "$matched_line" | "$sha256_cmd" -c --status - 2>/dev/null; then
+            echo "  - $file (modified)" >&2
+          fi
+        else
+          echo "  - $file (new)" >&2
+        fi
+      fi
+    done
+  fi
   "${BAZEL:-bazel}" build {{bazel_env_label}}
   tmp=$(mktemp)
   trap 'rm -f "$tmp"' EXIT INT TERM
   awk '
     NR==FNR { files[$0]=1; next }
     {
-      # Extract filepath (everything after first two spaces)
       match($0, /^[^ ]+ +/)
       filepath = substr($0, RSTART + RLENGTH)
       if (!(filepath in files)) print
     }
   ' <(printf "%s\n" "${files_to_watch[@]}") "$lock_file" > "$tmp" 2>/dev/null || true
-  $sha256_cmd "${files_to_watch[@]}" >> "$tmp"
+  "$sha256_cmd" "${files_to_watch[@]}" >> "$tmp"
   mv "$tmp" "$lock_file"
   BAZEL_ENV_INTERNAL_EXEC=True exec "$own_path" "$@"
 fi

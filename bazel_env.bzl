@@ -516,6 +516,37 @@ def bazel_env(*, name, tools = {}, toolchains = {}, watch_dirs = {}, watch_files
             In older versions, use a "resolved" toolchain target such as
             `@bazel_tools//tools/cpp:current_cc_toolchain` instead.
 
+        watch_dirs: A dictionary mapping tool names to directories that will be monitored by
+            `bazel_env`. When any file within these directories changes, it triggers
+            a rebuild of `bazel_env`. Paths are relative to the workspace root.
+
+            Use the tool name "_common" for directories which are common to all tools.
+
+            This attribute is fully optional. It allows you to provide a heuristic
+            set of directories that approximates what Bazel tracks during the
+            analysis phase. This can significantly improve performance,
+            at the cost of manually maintaining the directory list.
+
+            When changes are detected, a message will be displayed listing the changed
+            files (marked as "modified" or "new") before the rebuild begins.
+
+        watch_files: A dictionary mapping tool names to specific files that will be monitored
+            by `bazel_env`. When any of these files are modified, `bazel_env` will
+            be rebuilt. Paths are relative to the workspace root.
+
+            Use the tool name "_common" for files which are common to all tools.
+
+            Like `watch_dirs`, this attribute is optional. It gives you fine-grained
+            control over rebuild triggers by specifying individual files rather than
+            entire directories. This is useful when only a small set of known files
+            affect the tool's behavior, providing even lower overhead while still
+            mimicking Bazel's file-tracking during the analysis phase.
+
+            When changes are detected, a message will be displayed listing the changed
+            files (marked as "modified" or "new") before the rebuild begins.
+
+            Prefer to use this over the `watch_dirs` attribute for better performance.
+
         **kwargs: Additional arguments to pass to the main `bazel_env` target. It is usually not
             necessary to provide any and the target should have private visibility.
     """

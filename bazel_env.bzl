@@ -445,6 +445,30 @@ _bazel_env_rule = rule(
 
 _FORBIDDEN_TOOL_NAMES = ["direnv", "bazel", "bazelisk"]
 
+def _write_watch_dirs(tool_name, dirs):
+    file = name + "/bin/_{}_watch_dirs".format(tool_name)
+    write_file(
+        name = file,
+        out = file + ".txt",
+        content = [" " + " ".join(dirs) + " "],
+        is_executable = False,
+        visibility = ["//visibility:private"],
+        tags = ["manual"],
+    )
+    return file
+
+def _write_watch_files(tool_name, files):
+    file = name + "/bin/_{}_watch_files".format(tool_name)
+    write_file(
+        name = file,
+        out = file + ".txt",
+        content = [" " + " ".join(files) + " "],
+        is_executable = False,
+        visibility = ["//visibility:private"],
+        tags = ["manual"],
+    )
+    return file
+
 def bazel_env(*, name, tools = {}, toolchains = {}, watch_dirs = {}, watch_files = {}, **kwargs):
     # type: (string, dict[string, string | Label], dict[string, string | Label]) -> None
     """Makes Bazel-managed tools and toolchains available under stable paths.
@@ -577,27 +601,9 @@ def bazel_env(*, name, tools = {}, toolchains = {}, watch_dirs = {}, watch_files
     common = "_common"
 
     if common in watch_dirs:
-        watch_dirs_file = name + "/bin/_{}_watch_dirs".format(common)
-        write_file(
-            name = watch_dirs_file,
-            out = watch_dirs_file + ".txt",
-            content = [" " + " ".join(watch_dirs[common]) + " "],
-            is_executable = False,
-            visibility = ["//visibility:private"],
-            tags = ["manual"],
-        )
-        tool_dirs.append(watch_dirs_file)
+        tool_dirs.append(_write_watch_dirs(common, watch_dirs[common]))
     if common in watch_files:
-        watch_files_file = name + "/bin/_{}_watch_files".format(common)
-        write_file(
-            name = watch_files_file,
-            out = watch_files_file + ".txt",
-            content = [" " + " ".join(watch_files[common]) + " "],
-            is_executable = False,
-            visibility = ["//visibility:private"],
-            tags = ["manual"],
-        )
-        tool_files.append(watch_files_file)
+        tool_files.append(_write_watch_files(common, watch_files[common]))
 
     for tool_name, tool in tools.items():
         if not tool_name:
@@ -624,27 +630,9 @@ def bazel_env(*, name, tools = {}, toolchains = {}, watch_dirs = {}, watch_files
             **tool_kwargs
         )
         if tool_name in watch_dirs:
-            watch_dirs_file = name + "/bin/_{}_watch_dirs".format(tool_name)
-            write_file(
-                name = watch_dirs_file,
-                out = watch_dirs_file + ".txt",
-                content = [" " + " ".join(watch_dirs[tool_name]) + " "],
-                is_executable = False,
-                visibility = ["//visibility:private"],
-                tags = ["manual"],
-            )
-            tool_dirs.append(watch_dirs_file)
+            tool_dirs.append(_write_watch_dirs(tool_name, watch_dirs[tool_name]))
         if tool_name in watch_files:
-            watch_files_file = name + "/bin/_{}_watch_files".format(tool_name)
-            write_file(
-                name = watch_files_file,
-                out = watch_files_file + ".txt",
-                content = [" " + " ".join(watch_files[tool_name]) + " "],
-                is_executable = False,
-                visibility = ["//visibility:private"],
-                tags = ["manual"],
-            )
-            tool_files.append(watch_files_file)
+            tool_files.append(_write_watch_files(tool_name, watch_files[tool_name]))
 
     _bazel_env_rule(
         name = name,

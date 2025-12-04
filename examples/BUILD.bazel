@@ -52,10 +52,22 @@ bazel_env(
         # Add selected multitool tools to the PATH.
         # Avoid adding all of them, since some may be intended only as build-time tools.
         # See https://github.com/buildbuddy-io/bazel_env.bzl/issues/61
-        tool: label for tool, label in MULTITOOL_TOOLS.items() if tool in [
+        tool: label
+        for tool, label in MULTITOOL_TOOLS.items()
+        if tool in [
             "ibazel",
             "terraform",
         ]
+    },
+    watch_files = {
+        "_common": [
+            "MODULE.bazel",
+            "BUILD.bazel",
+        ],
+        "python_tool": [
+            "python_tool.py",
+            "python_tool_lib.py",
+        ],
     },
 )
 

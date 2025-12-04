@@ -1,3 +1,5 @@
 bazel-*
 MODULE.bazel.lock
 .ijwb
+.idea
+bazel_env.lock

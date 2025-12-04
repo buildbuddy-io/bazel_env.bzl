@@ -30,13 +30,7 @@ function assert_cmd_output() {
     exit 1
   fi
 
-  if [[ "$(printf '%s\n' "$full_output" | sed -n '1p')" == "Fake Bazel stdout" &&
-        "$(printf '%s\n' "$full_output" | sed -n '2p')" == "Fake Bazel stderr" ]]; then
-    cleaned_output="$(printf '%s\n' "$full_output" | tail -n +3)"
-  else
-    cleaned_output="$full_output"
-  fi
-  local -r actual_first_line="$(echo "$cleaned_output" | head -n 1)"
+  local -r actual_first_line="$(echo "$full_output" | head -n 1)"
   # Allow for wildcard matching and print a diff if the output doesn't match.
   # shellcheck disable=SC2053
   if [[ $actual_first_line == $expected_first_line ]]; then
@@ -138,6 +132,8 @@ diff <(expected_output "$BAZEL_REPO_NAME_SEPARATOR" "$TOOLCHAIN_TYPES_SUPPORTED"
 
 #### Tools ####
 
+# First call to any bazel_env tool will trigger rebuild
+assert_cmd_output "bazel-cc --version" "Detected changes in watched files, rebuilding bazel_env..."
 assert_cmd_output "bazel-cc --version" "@(*gcc*|*clang*)"
 assert_cmd_output "buildifier --version" "buildifier version: 7.3.1 "
 assert_cmd_output "buildozer --version" "buildozer version: 7.1.2 "

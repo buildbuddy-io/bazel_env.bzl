@@ -251,7 +251,7 @@ def _tool_impl(ctx):
                 "{{bazel_env_label}}": str(ctx.label).removeprefix("@@").removesuffix("/bin/" + name),
                 "{{rlocation_path}}": rlocation_path,
                 "{{extra_env}}": "\n".join([
-                    "export {}={}".format(k, repr(v))
+                    "set {}={}".format(k, repr(v))
                     for k, v in extra_env.items()
                 ]),
                 "{{batch_rlocation_function}}": BATCH_RLOCATION_FUNCTION,

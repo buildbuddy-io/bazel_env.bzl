@@ -22,6 +22,14 @@
                 "sha256": "7163faf9da829afa633194ffa11e4a4ef8d7b8359cefbc13f71a58cc3b860d9e",
                 "os": "macos",
                 "cpu": "arm64"
+            },
+            {
+                "kind": "archive",
+                "url": "https://github.com/bufbuild/buf/releases/download/v1.39.0/buf-Windows-x86_64.zip",
+                "file": "buf/bin/buf.exe",
+                "sha256": "2bab7e14439138e23a0d81c33a5e71aa6abba7425d79e107482400e3885f3f04",
+                "os": "windows",
+                "cpu": "x86_64"
             }
         ]
     },
@@ -47,6 +55,13 @@
                 "sha256": "518c4c4aacaa3f5175356e2c47ffcd278e7dd4228c97d83d1f396a9819d4f030",
                 "os": "macos",
                 "cpu": "arm64"
+            },
+            {
+                "kind": "file",
+                "url": "https://github.com/docker/compose/releases/download/v2.29.2/docker-compose-windows-x86_64.exe",
+                "sha256": "59cd2bd789ab2e5920674b8ac5d17a19a684b1622f17c847cc7361e832508d25",
+                "os": "windows",
+                "cpu": "x86_64"
             }
         ]
     },
@@ -72,6 +87,13 @@
                 "sha256": "c2da75cbab7a4b2b97ba534653bb12e4dd731157bb1c9d660f79df3b330a7239",
                 "os": "macos",
                 "cpu": "arm64"
+            },
+            {
+                "kind": "file",
+                "url": "https://github.com/bazelbuild/bazel-watcher/releases/download/v0.25.3/ibazel_windows_amd64.exe",
+                "sha256": "b6c81cd1ce30e575924ad2e43ba4035cf33991d18c356c41bb7ae7d2e39cfbbf",
+                "os": "windows",
+                "cpu": "x86_64"
             }
         ]
     },
@@ -79,27 +101,43 @@
         "binaries": [
             {
                 "kind": "archive",
-                "url": "https://github.com/theoremlp/multitool/releases/download/v0.8.0/multitool-aarch64-unknown-linux-gnu.tar.xz",
+                "url": "https://github.com/theoremlp/multitool/releases/download/v0.9.0/multitool-aarch64-unknown-linux-gnu.tar.xz",
                 "file": "multitool-aarch64-unknown-linux-gnu/multitool",
-                "sha256": "e249591e31fd3f7f27782d3b3da1ce077f9432fdfc7e163bac2b7cf43c3f87a0",
+                "sha256": "693b66def2d8dacdfcb5a011b7c32a8e89a13bdc031db8dc40c0759a38253103",
                 "os": "linux",
                 "cpu": "arm64"
             },
             {
                 "kind": "archive",
-                "url": "https://github.com/theoremlp/multitool/releases/download/v0.8.0/multitool-x86_64-unknown-linux-gnu.tar.xz",
+                "url": "https://github.com/theoremlp/multitool/releases/download/v0.9.0/multitool-x86_64-unknown-linux-gnu.tar.xz",
                 "file": "multitool-x86_64-unknown-linux-gnu/multitool",
-                "sha256": "fc7e5e78f8efa6173cb82659f48ef0acd6ae6f0b906781ab9d4b058f774f657c",
+                "sha256": "34dc5968dad458a4050ebde58e484ebb7c624a119e4031347683eeb80922e6df",
                 "os": "linux",
                 "cpu": "x86_64"
             },
             {
                 "kind": "archive",
-                "url": "https://github.com/theoremlp/multitool/releases/download/v0.8.0/multitool-aarch64-apple-darwin.tar.xz",
+                "url": "https://github.com/theoremlp/multitool/releases/download/v0.9.0/multitool-aarch64-apple-darwin.tar.xz",
                 "file": "multitool-aarch64-apple-darwin/multitool",
-                "sha256": "3187c94895358820c656c6a1736d442b3a568a5b1dd17c4c35f3903a07b709a2",
+                "sha256": "8f5e0cd033b0fcc128c762f8d527110433523da378619cecf40e91c1df5c0686",
                 "os": "macos",
                 "cpu": "arm64"
+            },
+            {
+                "kind": "archive",
+                "url": "https://github.com/theoremlp/multitool/releases/download/v0.9.0/multitool-x86_64-apple-darwin.tar.xz",
+                "file": "multitool-x86_64-apple-darwin/multitool",
+                "sha256": "abde3bbbd49a09d33048e1f55cc9a8aa5dd61a13493a0b1bd5ffc2c56e5bf837",
+                "os": "macos",
+                "cpu": "x86_64"
+            },
+            {
+                "kind": "archive",
+                "url": "https://github.com/theoremlp/multitool/releases/download/v0.9.0/multitool-x86_64-pc-windows-msvc.zip",
+                "file": "multitool.exe",
+                "sha256": "df058283b8d23fd56f8accee3ad218faef20d5bd81735c2615626aeca46d2158",
+                "os": "windows",
+                "cpu": "x86_64"
             }
         ]
     },
@@ -128,6 +166,14 @@
                 "sha256": "168cfeb339dbbfea6be651573ec168e6ca08bab79a4fc0474681eee1e9a95de9",
                 "os": "macos",
                 "cpu": "arm64"
+            },
+            {
+                "kind": "archive",
+                "url": "https://releases.hashicorp.com/terraform/1.9.3/terraform_1.9.3_windows_amd64.zip",
+                "file": "terraform.exe",
+                "sha256": "87e41f1d58296bf15f050ee262251309568532df7d3410cd7561b4c595ff5268",
+                "os": "windows",
+                "cpu": "x86_64"
             }
         ]
     }

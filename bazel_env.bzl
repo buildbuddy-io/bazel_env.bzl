@@ -1,3 +1,5 @@
+load("@aspect_bazel_lib//lib:paths.bzl", "to_rlocation_path")
+load("@aspect_bazel_lib//lib:windows_utils.bzl", "BATCH_RLOCATION_FUNCTION")
 load("@bazel_features//:features.bzl", "bazel_features")
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
 
@@ -207,8 +209,10 @@ _extract_toolchain_info = aspect(
 
 def _tool_impl(ctx):
     # type: (ctx) -> list[Provider]
+    is_windows = ctx.target_platform_has_constraint(ctx.attr._windows_constraint[platform_common.ConstraintValueInfo])
     name = ctx.label.name.rpartition("/")[-1]
-    out = ctx.actions.declare_file(ctx.label.name)
+    out_name = ctx.label.name + (".bat" if is_windows else "")
+    out = ctx.actions.declare_file(out_name)
 
     extra_env = {}
     if ctx.attr.path:
@@ -230,7 +234,7 @@ def _tool_impl(ctx):
         # There is only ever a single target, the attribute only takes an array value because of the transition.
         target = ctx.attr.target[0]
 
-        rlocation_path = _rlocation_path(ctx, ctx.executable.target)
+        rlocation_path = _rlocation_path(ctx, ctx.executable.target) if not is_windows else to_rlocation_path(ctx, ctx.executable.target)
 
         runfiles = ctx.runfiles(ctx.files.target)
         runfiles = runfiles.merge(target[DefaultInfo].default_runfiles)
@@ -238,19 +242,35 @@ def _tool_impl(ctx):
         if RunEnvironmentInfo in target:
             extra_env = target[RunEnvironmentInfo].environment
 
-    ctx.actions.expand_template(
-        template = ctx.file._launcher,
-        output = out,
-        is_executable = True,
-        substitutions = {
-            "{{bazel_env_label}}": str(ctx.label).removeprefix("@@").removesuffix("/bin/" + name),
-            "{{rlocation_path}}": rlocation_path,
-            "{{extra_env}}": "\n".join([
-                "export {}={}".format(k, repr(v))
-                for k, v in extra_env.items()
-            ]),
-        },
-    )
+    if is_windows:
+        ctx.actions.expand_template(
+            template = ctx.file._launcher_windows,
+            output = out,
+            is_executable = True,
+            substitutions = {
+                "{{bazel_env_label}}": str(ctx.label).removeprefix("@@").removesuffix("/bin/" + name),
+                "{{rlocation_path}}": rlocation_path,
+                "{{extra_env}}": "\n".join([
+                    "set {}={}".format(k, repr(v))
+                    for k, v in extra_env.items()
+                ]),
+                "{{batch_rlocation_function}}": BATCH_RLOCATION_FUNCTION,
+            },
+        )
+    else:
+        ctx.actions.expand_template(
+            template = ctx.file._launcher,
+            output = out,
+            is_executable = True,
+            substitutions = {
+                "{{bazel_env_label}}": str(ctx.label).removeprefix("@@").removesuffix("/bin/" + name),
+                "{{rlocation_path}}": rlocation_path,
+                "{{extra_env}}": "\n".join([
+                    "export {}={}".format(k, repr(v))
+                    for k, v in extra_env.items()
+                ]),
+            },
+        )
 
     return [
         DefaultInfo(
@@ -283,8 +303,18 @@ _tool = rule(
             default = ":launcher.sh.tpl",
             executable = True,
         ),
+        "_launcher_windows": attr.label(
+            allow_single_file = True,
+            cfg = _flip_output_dir,
+            default = ":launcher.bat.tpl",
+            executable = True,
+        ),
+        "_windows_constraint": attr.label(default = "@platforms//os:windows"),
     },
     executable = True,
+    toolchains = [
+        "@bazel_tools//tools/sh:toolchain_type"
+    ],
 )
 
 def _toolchain_impl(ctx):
@@ -376,10 +406,14 @@ def _bazel_env_rule_impl(ctx):
     ) for toolchain in ctx.attr.toolchain_targets]
     toolchain_name_pad = max([len(toolchain_info.name) for toolchain_info in toolchain_infos] + [0])
 
-    status_script = ctx.actions.declare_file(ctx.label.name + ".sh")
-    tool_regex = "\\|".join([tool_info.name for tool_info in tool_infos] + [unique_name_tool.basename, ctx.file.all_tools_file.basename])
+    is_windows = ctx.target_platform_has_constraint(ctx.attr._windows_constraint[platform_common.ConstraintValueInfo])
+    status_name = ctx.label.name + ".sh" if not is_windows else ctx.label.name + ".bat"
+    status_script = ctx.actions.declare_file(status_name)
+    regex_sep = "\\|" if not is_windows else " "
+    tool_regex = regex_sep.join([tool_info.name for tool_info in tool_infos] + [unique_name_tool.basename, ctx.file.all_tools_file.basename])
+    echo_cmd = "echo" if is_windows else ""
     ctx.actions.expand_template(
-        template = ctx.file._status,
+        template = ctx.file._status_windows if is_windows else ctx.file._status,
         output = status_script,
         is_executable = True,
         substitutions = {
@@ -387,20 +421,20 @@ def _bazel_env_rule_impl(ctx):
             # We assume that the target is in the main repo and want the label to look like this:
             # //:bazel_env
             "{{label}}": str(ctx.label).removeprefix("@@"),
-            "{{bin_dir}}": unique_name_tool.dirname,
+            "{{bin_dir}}": unique_name_tool.dirname if not is_windows else unique_name_tool.dirname.replace("/", "\\"),
             "{{unique_name_tool}}": unique_name_tool.basename,
             "{{has_tools}}": str(bool(tool_infos)),
             "{{tools_regex}}": tool_regex,
             "{{tools}}": "\n".join(
                 [
-                    "  * {}:{} {}".format(tool_info.name, (tool_name_pad - len(tool_info.name)) * " ", tool_info.raw_tool)
+                    "{}  * {}:{} {}".format(echo_cmd, tool_info.name, (tool_name_pad - len(tool_info.name)) * " ", tool_info.raw_tool)
                     for tool_info in tool_infos
                 ],
             ),
             "{{has_toolchains}}": str(bool(ctx.attr.toolchain_targets)),
             "{{toolchains}}": "\n".join(
                 [
-                    "  * {}:{} {}".format(toolchain_info.name, (toolchain_name_pad - len(toolchain_info.name)) * " ", toolchain_info.path)
+                    "{}  * {}:{} {}".format(echo_cmd, toolchain_info.name, (toolchain_name_pad - len(toolchain_info.name)) * " ", toolchain_info.path)
                     for toolchain_info in toolchain_infos
                 ],
             ),
@@ -432,6 +466,13 @@ _bazel_env_rule = rule(
             default = ":status.sh.tpl",
             executable = True,
         ),
+        "_status_windows": attr.label(
+            allow_single_file = True,
+            cfg = "target",
+            default = ":status.bat.tpl",
+            executable = True,
+        ),
+        "_windows_constraint": attr.label(default = "@platforms//os:windows"),
     },
     executable = True,
 )

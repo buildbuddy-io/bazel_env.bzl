@@ -32,6 +32,117 @@ if ! grep -q -F "$own_name" "$own_dir/_all_tools.txt"; then
   exit 1
 fi
 
+workspace_path="$(_bazel__get_workspace_path)"
+files_to_watch=()
+
+if [[ -f "${own_dir}/__common_watch_dirs.txt" ]]; then
+  for dir in $(cat "${own_dir}/__common_watch_dirs.txt"); do
+    for file in $(find "$workspace_path/$dir" -type f); do
+      files_to_watch+=("$file")
+    done
+  done
+fi
+
+if [[ -f "${own_dir}/__common_watch_files.txt" ]]; then
+  for file in $(cat "${own_dir}/__common_watch_files.txt"); do
+    if [[ -f "$workspace_path/$file" ]]; then
+      files_to_watch+=("$workspace_path/$file")
+    fi
+  done
+fi
+
+if [[ -f "${own_dir}/_${own_name}_watch_dirs.txt" ]]; then
+  for dir in $(cat "${own_dir}/_${own_name}_watch_dirs.txt"); do
+    for file in $(find "$workspace_path/$dir" -type f); do
+      files_to_watch+=("$file")
+    done
+  done
+fi
+
+if [[ -f "${own_dir}/_${own_name}_watch_files.txt" ]]; then
+  for file in $(cat "${own_dir}/_${own_name}_watch_files.txt"); do
+    if [[ -f "$workspace_path/$file" ]]; then
+      files_to_watch+=("$workspace_path/$file")
+    fi
+  done
+fi
+
+rebuild_env=False
+sha256_cmd="${own_path}.runfiles/{{sha256sum_rlocation_path}}"
+
+if [[ ${#files_to_watch[@]} -gt 0 ]]; then
+  lock_file="$workspace_path/bazel_env.lock"
+
+  if [[ ! -f "$lock_file" ]]; then
+    touch "$lock_file"
+  fi
+
+  matched_lines=$(awk '
+    NR==FNR { files[$0]=1; next }
+    {
+      match($0, /^[^ ]+ +/)
+      filepath = substr($0, RSTART + RLENGTH)
+      if (filepath in files) print
+    }
+  ' <(printf "%s\n" "${files_to_watch[@]}") "$lock_file" 2>/dev/null || true)
+
+  if [[ -n "$matched_lines" ]]; then
+    matched_count=$(echo "$matched_lines" | wc -l)
+  else
+    matched_count=0
+  fi
+
+  if [[ $matched_count -eq ${#files_to_watch[@]} ]]; then
+    if echo "$matched_lines" | "$sha256_cmd" -c --status - 2>/dev/null; then
+      rebuild_env=False
+    else
+      rebuild_env=True
+    fi
+  else
+    rebuild_env=True
+  fi
+fi
+
+if [[ $rebuild_env == True && "${BAZEL_ENV_INTERNAL_EXEC:-False}" != True ]]; then
+  echo "Detected changes in watched files, rebuilding bazel_env..." >&2
+  if [[ ${#files_to_watch[@]} -gt 0 ]]; then
+    echo "Changed files:" >&2
+    for file in "${files_to_watch[@]}"; do
+      if [[ -f "$file" ]]; then
+        matched_line=$(awk -v file="$file" '
+          {
+            match($0, /^[^ ]+ +/)
+            filepath = substr($0, RSTART + RLENGTH)
+            if (filepath == file) print
+          }
+        ' "$lock_file" 2>/dev/null || true)
+
+        if [[ -n "$matched_line" ]]; then
+          if ! echo "$matched_line" | "$sha256_cmd" -c --status - 2>/dev/null; then
+            echo "  - $file (modified)" >&2
+          fi
+        else
+          echo "  - $file (new)" >&2
+        fi
+      fi
+    done
+  fi
+  "${BAZEL:-bazel}" build {{bazel_env_label}}
+  tmp=$(mktemp)
+  trap 'rm -f "$tmp"' EXIT INT TERM
+  awk '
+    NR==FNR { files[$0]=1; next }
+    {
+      match($0, /^[^ ]+ +/)
+      filepath = substr($0, RSTART + RLENGTH)
+      if (!(filepath in files)) print
+    }
+  ' <(printf "%s\n" "${files_to_watch[@]}") "$lock_file" > "$tmp" 2>/dev/null || true
+  "$sha256_cmd" "${files_to_watch[@]}" >> "$tmp"
+  mv "$tmp" "$lock_file"
+  BAZEL_ENV_INTERNAL_EXEC=True exec "$own_path" "$@"
+fi
+
 # Set up an environment similar to 'bazel run' to support tools designed to be
 # run with it.
 # Since tools may cd into BUILD_WORKSPACE_DIRECTORY, ensure that RUNFILES_DIR
@@ -50,7 +161,7 @@ export JS_BINARY__NO_CD_BINDIR=1
 BUILD_WORKING_DIRECTORY="$(pwd)"
 export BUILD_WORKING_DIRECTORY
 
-BUILD_WORKSPACE_DIRECTORY="$(_bazel__get_workspace_path)"
+BUILD_WORKSPACE_DIRECTORY="$workspace_path"
 export BUILD_WORKSPACE_DIRECTORY
 
 case "{{rlocation_path}}" in

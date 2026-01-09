@@ -132,6 +132,8 @@ diff <(expected_output "$BAZEL_REPO_NAME_SEPARATOR" "$TOOLCHAIN_TYPES_SUPPORTED"
 
 #### Tools ####
 
+# First call to any bazel_env tool will trigger rebuild
+assert_cmd_output "bazel-cc --version" "Detected changes in watched files, rebuilding bazel_env..."
 assert_cmd_output "bazel-cc --version" "@(*gcc*|*clang*)"
 assert_cmd_output "buildifier --version" "buildifier version: 7.3.1 "
 assert_cmd_output "buildozer --version" "buildozer version: 7.1.2 "

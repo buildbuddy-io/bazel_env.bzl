@@ -17,7 +17,7 @@ _TOOLCHAIN_TYPES_SUPPORTED = bazel_features.rules.aspect_propagation_context
 bazel_env(
     name = "bazel_env",
     toolchains = {
-        "cc_toolchain": "@bazel_tools//tools/cpp:current_cc_toolchain",
+        # "cc_toolchain": "@bazel_tools//tools/cpp:current_cc_toolchain",
         "jdk": "@rules_java//toolchains:current_host_java_runtime",
         "python": "@rules_python//python:current_py_toolchain",
         "nodejs": "@nodejs_toolchains//:resolved_toolchain",
@@ -33,7 +33,7 @@ bazel_env(
     ),
     tools = {
         # Tool paths can reference the Make variables provided by toolchains.
-        "bazel-cc": "$(CC)",
+        # "bazel-cc": "$(CC)",
         # Tools can also be specified as labels.
         "buildifier": "@buildifier_prebuilt//:buildifier",
         "buildozer": BUILDOZER_LABEL,

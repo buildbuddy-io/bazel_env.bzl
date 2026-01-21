@@ -36,7 +36,7 @@ single_version_override(
 bazel_dep(name = "aspect_bazel_lib", version = "2.19.2")
 
 register_execution_platforms(
-    "//:exotic_platform",
+    # "//:exotic_platform",
 )
 
 # Don't update the versions below, they are only used to verify the hermeticity of bazel_env.

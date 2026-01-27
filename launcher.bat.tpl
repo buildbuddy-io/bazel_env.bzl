@@ -12,6 +12,14 @@ REM Determine bin_path based on rlocation_path
 call :rlocation {{rlocation_path}} bin_path
 set bin_path=%bin_path:/=\%
 
+REM Use PowerShell one-liner to resolve symlink
+for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "($info = Get-Item '%bin_path%' -Force) ; if ($info.LinkType -eq 'SymbolicLink' -or $info.LinkType -eq 'Junction') { $info.Target } else { $info.FullName }"`) do (
+    set resolved_bin_path=%%A
+)
+ 
+REM Use delayed expansion for resolved_bin_path!
+set "bin_path=!resolved_bin_path!"
+
 call :_bazel__get_workspace_path
 set BUILD_WORKSPACE_DIRECTORY=%workspace_path%
 

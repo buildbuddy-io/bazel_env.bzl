@@ -21,6 +21,26 @@ _bazel__get_workspace_path() {
   echo "$workspace"
 }
 
+# Derive the source workspace from the script's own path.
+# The script is always located at <workspace>/bazel-out/..., so we can
+# extract the workspace by finding the parent of 'bazel-out'.
+# This is used for watch_dirs to ensure we watch the correct source files
+# regardless of where the tool is run from.
+_bazel__get_source_workspace_path() {
+  local script_path="$1"
+  # Extract everything before /bazel-out/
+  if [[ "$script_path" == */bazel-out/* ]]; then
+    local workspace="${script_path%%/bazel-out/*}"
+    # Remove trailing /. or / if present (can occur with ./bazel-out/...)
+    workspace="${workspace%/.}"
+    workspace="${workspace%/}"
+    echo "$workspace"
+  else
+    # Fallback: not in a bazel-out directory (shouldn't happen)
+    echo ""
+  fi
+}
+
 case "${BASH_SOURCE[0]}" in
   /*) own_path="${BASH_SOURCE[0]}" ;;
   *) own_path="$PWD/${BASH_SOURCE[0]}" ;;
@@ -33,36 +53,46 @@ if ! grep -q -F "$own_name" "$own_dir/_all_tools.txt"; then
 fi
 
 workspace_path="$(_bazel__get_workspace_path)"
+source_workspace_path="$(_bazel__get_source_workspace_path "$own_path")"
 files_to_watch=()
+
+# Use source_workspace_path for watch_dirs to ensure we watch the correct
+# source files regardless of where the tool is run from.
+# Fall back to workspace_path if source_workspace_path is empty.
+watch_base="${source_workspace_path:-$workspace_path}"
 
 if [[ -f "${own_dir}/__common_watch_dirs.txt" ]]; then
   for dir in $(cat "${own_dir}/__common_watch_dirs.txt"); do
-    for file in $(find "$workspace_path/$dir" -type f); do
-      files_to_watch+=("$file")
-    done
+    if [[ -d "$watch_base/$dir" ]]; then
+      for file in $(find "$watch_base/$dir" -type f); do
+        files_to_watch+=("$file")
+      done
+    fi
   done
 fi
 
 if [[ -f "${own_dir}/__common_watch_files.txt" ]]; then
   for file in $(cat "${own_dir}/__common_watch_files.txt"); do
-    if [[ -f "$workspace_path/$file" ]]; then
-      files_to_watch+=("$workspace_path/$file")
+    if [[ -f "$watch_base/$file" ]]; then
+      files_to_watch+=("$watch_base/$file")
     fi
   done
 fi
 
 if [[ -f "${own_dir}/_${own_name}_watch_dirs.txt" ]]; then
   for dir in $(cat "${own_dir}/_${own_name}_watch_dirs.txt"); do
-    for file in $(find "$workspace_path/$dir" -type f); do
-      files_to_watch+=("$file")
-    done
+    if [[ -d "$watch_base/$dir" ]]; then
+      for file in $(find "$watch_base/$dir" -type f); do
+        files_to_watch+=("$file")
+      done
+    fi
   done
 fi
 
 if [[ -f "${own_dir}/_${own_name}_watch_files.txt" ]]; then
   for file in $(cat "${own_dir}/_${own_name}_watch_files.txt"); do
-    if [[ -f "$workspace_path/$file" ]]; then
-      files_to_watch+=("$workspace_path/$file")
+    if [[ -f "$watch_base/$file" ]]; then
+      files_to_watch+=("$watch_base/$file")
     fi
   done
 fi
@@ -71,7 +101,7 @@ rebuild_env=False
 sha256_cmd="${own_path}.runfiles/{{sha256sum_rlocation_path}}"
 
 if [[ ${#files_to_watch[@]} -gt 0 ]]; then
-  lock_file="$workspace_path/bazel_env.lock"
+  lock_file="$watch_base/bazel_env.lock"
 
   if [[ ! -f "$lock_file" ]]; then
     touch "$lock_file"
@@ -127,7 +157,8 @@ if [[ $rebuild_env == True && "${BAZEL_ENV_INTERNAL_EXEC:-False}" != True ]]; th
       fi
     done
   fi
-  "${BAZEL:-bazel}" build {{bazel_env_label}}
+  # Run bazel from the source workspace to ensure it can find the WORKSPACE/MODULE file.
+  (cd "$watch_base" && "${BAZEL:-bazel}" build {{bazel_env_label}})
   tmp=$(mktemp)
   trap 'rm -f "$tmp"' EXIT INT TERM
   awk '

@@ -149,6 +149,8 @@ assert_cmd_output "node --version" "v16.18.1"
 assert_cmd_output "pnpm --version" "8.6.7"
 assert_cmd_output "python --version" "Python 3.11.8"
 # Bazel's Python launcher requires a system installation of python3.
+# python_tool has its own watch_files, so first call triggers rebuild.
+assert_cmd_output "python_tool" "Detected changes in watched files, rebuilding bazel_env..." ":$(dirname "$(which python3)")"
 assert_cmd_output "python_tool" "python_tool version 0.0.1" ":$(dirname "$(which python3)")"
 assert_cmd_output "cargo --version" "cargo 1.80.0 (376290515 2024-07-16)"
 assert_cmd_output "rustc --version" "rustc 1.80.0 (051478957 2024-07-21)"
@@ -167,3 +169,36 @@ assert_cmd_output "$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_
 assert_cmd_output "$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/toolchains/rust/bin/cargo --version" "cargo 1.80.0 (376290515 2024-07-16)"
 assert_cmd_output "$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/toolchains/rust/bin/rustc --version" "rustc 1.80.0 (051478957 2024-07-21)"
 [[ -f "$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/toolchains/rules_python_docs/extending.md" ]]
+
+#### Running from outside workspace ####
+
+# Test that tools work when run from a directory outside the Bazel workspace.
+# This verifies that watch_dirs/watch_files are resolved relative to the source
+# workspace (derived from the script path) rather than the current directory.
+
+external_tmpdir=$(mktemp -d 2>/dev/null || mktemp -d -t 'external_tmpdir')
+trap 'rm -rf "$external_tmpdir"' EXIT
+
+# Run buildifier from outside the workspace - should work without errors
+# Note: BAZEL must be an absolute path since we're running from a different directory
+external_output=$(cd "$external_tmpdir" && env \
+    -u TEST_SRCDIR \
+    -u RUNFILES_DIR \
+    -u RUNFILES_MANIFEST_FILE \
+    BAZEL="$build_workspace_directory/fake_bazel.sh" \
+    PATH="$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/bin:/bin:/usr/bin" \
+    buildifier --version 2>&1) || {
+  echo "Running buildifier from outside workspace failed:"
+  echo "$external_output"
+  exit 1
+}
+
+# Verify the output contains the version (not an error about missing directories)
+assert_contains "buildifier version:" "$external_output"
+
+# Verify there's no "find:" error in the output (which would indicate watch_dirs failed)
+if echo "$external_output" | grep -q "^find:"; then
+  echo "Found 'find:' error when running from outside workspace:"
+  echo "$external_output"
+  exit 1
+fi

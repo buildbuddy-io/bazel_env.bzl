@@ -51,6 +51,16 @@ bazel_env(
         "ibazel": MULTITOOL_TOOLS["ibazel"],
         "terraform": MULTITOOL_TOOLS["terraform"],
     },
+    watch_files = {
+        "_common": [
+            "MODULE.bazel",
+            "BUILD.bazel",
+        ],
+        "python_tool": [
+            "python_tool.py",
+            "python_tool_lib.py",
+        ],
+    },
 )
 
 alias(

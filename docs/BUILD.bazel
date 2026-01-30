@@ -1,5 +1,5 @@
 load("@bazel_skylib//rules:diff_test.bzl", "diff_test")
-load("@rules_proto//proto:proto_lang_toolchain.bzl", "proto_lang_toolchain")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 load("@stardoc//stardoc:stardoc.bzl", "stardoc")
 
 stardoc(
@@ -22,18 +22,4 @@ sh_binary(
     data = [
         ":bazel_env",
     ],
-)
-
-# Precompiled proto toolchain for stardoc
-proto_lang_toolchain(
-    name = "protoc_java_toolchain",
-    command_line = "--java_out=$(OUT)",
-    progress_message = "Generating java_proto_library %{label}",
-    runtime = "@protobuf_java//jar",
-)
-
-toolchain(
-    name = "protoc_java_toolchain.registration",
-    toolchain = ":protoc_java_toolchain",
-    toolchain_type = "@rules_java//java/proto:toolchain_type",
 )

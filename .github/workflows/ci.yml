@@ -37,7 +37,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        bazel: [7.x, 8.x, last_green]
+        bazel: [7.*, 8.*, 9.*, last_green]
         os: [ubuntu-latest, macos-latest]
     env:
       BAZELISK_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -52,11 +52,16 @@ jobs:
         # Build first because the tests rely on convenience symlinks.
         run: bazelisk build //... && bazelisk test //...
 
+      - name: Sanitize Bazel version
+        if: always()
+        id: bazel-version
+        run: echo "name=$(echo '${{ matrix.bazel }}' | tr '*' 'x')" >> $GITHUB_OUTPUT
+
       - name: Upload test logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: testlogs-${{ matrix.bazel}}-${{ matrix.os }}
+          name: testlogs-${{ steps.bazel-version.outputs.name }}-${{ matrix.os }}
           # https://github.com/actions/upload-artifact/issues/92#issuecomment-711107236
           path: |
             ${{ github.workspace }}/examples/bazel-testlogs*/**/test.log

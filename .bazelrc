@@ -6,3 +6,7 @@ common --java_runtime_version=remotejdk_21
 common --java_language_version=21
 common --tool_java_runtime_version=remotejdk_21
 common --tool_java_language_version=21
+
+# Use a prebuilt protoc to speed up uncached CI builds.
+common --@protobuf//bazel/toolchains:prefer_prebuilt_protoc
+common --incompatible_enable_proto_toolchain_resolution

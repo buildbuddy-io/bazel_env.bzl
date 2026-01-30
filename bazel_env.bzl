@@ -205,6 +205,8 @@ _extract_toolchain_info = aspect(
     )
 )
 
+_SHA256SUM_TOOLCHAIN_TYPE = "@rules_coreutils//coreutils/toolchain/sha256sum:type"
+
 def _tool_impl(ctx):
     # type: (ctx) -> list[Provider]
     name = ctx.label.name.rpartition("/")[-1]
@@ -238,6 +240,10 @@ def _tool_impl(ctx):
         if RunEnvironmentInfo in target:
             extra_env = target[RunEnvironmentInfo].environment
 
+    sha256sum = ctx.toolchains[_SHA256SUM_TOOLCHAIN_TYPE]
+
+    runfiles = runfiles.merge(sha256sum.default.default_runfiles)
+
     ctx.actions.expand_template(
         template = ctx.file._launcher,
         output = out,
@@ -245,6 +251,7 @@ def _tool_impl(ctx):
         substitutions = {
             "{{bazel_env_label}}": str(ctx.label).removeprefix("@@").removesuffix("/bin/" + name),
             "{{rlocation_path}}": rlocation_path,
+            "{{sha256sum_rlocation_path}}": _rlocation_path(ctx, sha256sum.run.executable),
             "{{extra_env}}": "\n".join([
                 "export {}={}".format(k, repr(v))
                 for k, v in extra_env.items()
@@ -285,6 +292,7 @@ _tool = rule(
         ),
     },
     executable = True,
+    toolchains = [_SHA256SUM_TOOLCHAIN_TYPE],
 )
 
 def _toolchain_impl(ctx):
@@ -348,7 +356,7 @@ def _bazel_env_rule_impl(ctx):
     # It is not necessary to stage the toolchain files (which are in runfiles) as inputs as their
     # repos have already been fetched before the toolchain rules were analyzed.
     transitive_inputs = [toolchain[DefaultInfo].files for toolchain in ctx.attr.toolchain_targets]
-    direct_inputs = [unique_name_tool, ctx.file.all_tools_file]
+    direct_inputs = [unique_name_tool, ctx.file.all_tools_file] + ctx.files.tool_dirs + ctx.files.tool_files
     tools = [tool[DefaultInfo].files_to_run for tool in ctx.attr.tool_targets]
     ctx.actions.run_shell(
         outputs = [implicit_out],
@@ -377,7 +385,12 @@ def _bazel_env_rule_impl(ctx):
     toolchain_name_pad = max([len(toolchain_info.name) for toolchain_info in toolchain_infos] + [0])
 
     status_script = ctx.actions.declare_file(ctx.label.name + ".sh")
-    tool_regex = "\\|".join([tool_info.name for tool_info in tool_infos] + [unique_name_tool.basename, ctx.file.all_tools_file.basename])
+    tool_regex = "\\|".join(
+        [tool_info.name for tool_info in tool_infos] +
+        [unique_name_tool.basename, ctx.file.all_tools_file.basename] +
+        [dir.basename for dir in ctx.files.tool_dirs] +
+        [file.basename for file in ctx.files.tool_files],
+    )
     ctx.actions.expand_template(
         template = ctx.file._status,
         output = status_script,
@@ -419,6 +432,8 @@ _bazel_env_rule = rule(
     implementation = _bazel_env_rule_impl,
     attrs = {
         "all_tools_file": attr.label(allow_single_file = True),
+        "tool_dirs": attr.label_list(allow_files = True),
+        "tool_files": attr.label_list(allow_files = True),
         "unique_name_tool": attr.label(),
         "tool_targets": attr.label_list(
             providers = [_ToolInfo],
@@ -438,7 +453,31 @@ _bazel_env_rule = rule(
 
 _FORBIDDEN_TOOL_NAMES = ["direnv", "bazel", "bazelisk"]
 
-def bazel_env(*, name, tools = {}, toolchains = {}, **kwargs):
+def _write_watch_dirs(name, tool_name, dirs):
+    watch_file = name + "/bin/_{}_watch_dirs".format(tool_name)
+    write_file(
+        name = watch_file,
+        out = watch_file + ".txt",
+        content = [" " + " ".join(dirs) + " "],
+        is_executable = False,
+        visibility = ["//visibility:private"],
+        tags = ["manual"],
+    )
+    return watch_file
+
+def _write_watch_files(name, tool_name, files):
+    watch_file = name + "/bin/_{}_watch_files".format(tool_name)
+    write_file(
+        name = watch_file,
+        out = watch_file + ".txt",
+        content = [" " + " ".join(files) + " "],
+        is_executable = False,
+        visibility = ["//visibility:private"],
+        tags = ["manual"],
+    )
+    return watch_file
+
+def bazel_env(*, name, tools = {}, toolchains = {}, watch_dirs = {}, watch_files = {}, **kwargs):
     # type: (string, dict[string, string | Label], dict[string, string | Label]) -> None
     """Makes Bazel-managed tools and toolchains available under stable paths.
 
@@ -471,6 +510,37 @@ def bazel_env(*, name, tools = {}, toolchains = {}, **kwargs):
             With Bazel 9.0.0-pre.20250311.1 and later, toolchain_type targets can be used directly.
             In older versions, use a "resolved" toolchain target such as
             `@bazel_tools//tools/cpp:current_cc_toolchain` instead.
+
+        watch_dirs: A dictionary mapping tool names to directories that will be monitored by
+            `bazel_env`. When any file within these directories changes, it triggers
+            a rebuild of `bazel_env`. Paths are relative to the workspace root.
+
+            Use the tool name "_common" for directories which are common to all tools.
+
+            This attribute is fully optional. It allows you to provide a heuristic
+            set of directories that approximates what Bazel tracks during the
+            analysis phase. This can significantly improve performance,
+            at the cost of manually maintaining the directory list.
+
+            When changes are detected, a message will be displayed listing the changed
+            files (marked as "modified" or "new") before the rebuild begins.
+
+        watch_files: A dictionary mapping tool names to specific files that will be monitored
+            by `bazel_env`. When any of these files are modified, `bazel_env` will
+            be rebuilt. Paths are relative to the workspace root.
+
+            Use the tool name "_common" for files which are common to all tools.
+
+            Like `watch_dirs`, this attribute is optional. It gives you fine-grained
+            control over rebuild triggers by specifying individual files rather than
+            entire directories. This is useful when only a small set of known files
+            affect the tool's behavior, providing even lower overhead while still
+            mimicking Bazel's file-tracking during the analysis phase.
+
+            When changes are detected, a message will be displayed listing the changed
+            files (marked as "modified" or "new") before the rebuild begins.
+
+            Prefer to use this over the `watch_dirs` attribute for better performance.
 
         **kwargs: Additional arguments to pass to the main `bazel_env` target. It is usually not
             necessary to provide any and the target should have private visibility.
@@ -565,6 +635,15 @@ def bazel_env(*, name, tools = {}, toolchains = {}, **kwargs):
             tags = ["manual"],
         )
 
+    tool_dirs = []
+    tool_files = []
+    common = "_common"
+
+    if common in watch_dirs:
+        tool_dirs.append(_write_watch_dirs(name, common, watch_dirs[common]))
+    if common in watch_files:
+        tool_files.append(_write_watch_files(name, common, watch_files[common]))
+
     for tool_name, tool in tools.items():
         if not tool_name:
             fail("empty tool names are not allowed")
@@ -589,10 +668,16 @@ def bazel_env(*, name, tools = {}, toolchains = {}, **kwargs):
             tags = ["manual"],
             **tool_kwargs
         )
+        if tool_name in watch_dirs:
+            tool_dirs.append(_write_watch_dirs(name, tool_name, watch_dirs[tool_name]))
+        if tool_name in watch_files:
+            tool_files.append(_write_watch_files(name, tool_name, watch_files[tool_name]))
 
     _bazel_env_rule(
         name = name,
         all_tools_file = all_tools_file,
+        tool_dirs = tool_dirs,
+        tool_files = tool_files,
         unique_name_tool = unique_name_tool,
         tool_targets = tool_targets,
         toolchain_targets = toolchain_targets,

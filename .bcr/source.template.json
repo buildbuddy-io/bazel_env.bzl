@@ -1,5 +1,6 @@
 {
   "integrity": "",
-  "strip_prefix": "bazel_env.bzl-{VERSION}",
-  "url": "https://github.com/{OWNER}/{REPO}/releases/download/{TAG}/bazel_env.bzl-{TAG}.tar.gz"
+  "strip_prefix": "{REPO}-{VERSION}",
+  "url": "https://github.com/{OWNER}/{REPO}/releases/download/{TAG}/{REPO}-{TAG}.tar.gz",
+  "docs_url": "https://github.com/{OWNER}/{REPO}/releases/download/{TAG}/{REPO}-{TAG}.docs.tar.gz",
 }

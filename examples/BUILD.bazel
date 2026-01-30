@@ -48,16 +48,8 @@ bazel_env(
         "cargo": "@rules_rust//tools/upstream_wrapper:cargo",
         "rustc": "@rules_rust//tools/upstream_wrapper:rustc",
         "rustfmt": "@rules_rust//tools/upstream_wrapper:rustfmt",
-    } | {
-        # Add selected multitool tools to the PATH.
-        # Avoid adding all of them, since some may be intended only as build-time tools.
-        # See https://github.com/buildbuddy-io/bazel_env.bzl/issues/61
-        tool: label
-        for tool, label in MULTITOOL_TOOLS.items()
-        if tool in [
-            "ibazel",
-            "terraform",
-        ]
+        "ibazel": MULTITOOL_TOOLS["ibazel"],
+        "terraform": MULTITOOL_TOOLS["terraform"],
     },
     watch_files = {
         "_common": [

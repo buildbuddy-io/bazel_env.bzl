@@ -22,8 +22,9 @@ _bazel__get_workspace_path() {
 }
 
 # Derive the source workspace from the script's own path.
-# The script is always located at <workspace>/bazel-out/..., so we can
-# extract the workspace by finding the parent of 'bazel-out'.
+# The script lives in the output base (which can be anywhere), but is invoked
+# through the convenience symlink at <workspace>/bazel-out/..., so we can
+# extract the workspace by finding the parent of 'bazel-out' in the invocation path.
 # This is used for watch_dirs to ensure we watch the correct source files
 # regardless of where the tool is run from.
 _bazel__get_source_workspace_path() {

@@ -149,6 +149,8 @@ assert_cmd_output "node --version" "v16.18.1"
 assert_cmd_output "pnpm --version" "8.6.7"
 assert_cmd_output "python --version" "Python 3.11.8"
 # Bazel's Python launcher requires a system installation of python3.
+# python_tool has its own watch_files, so first call triggers rebuild.
+assert_cmd_output "python_tool" "Detected changes in watched files, rebuilding bazel_env..." ":$(dirname "$(which python3)")"
 assert_cmd_output "python_tool" "python_tool version 0.0.1" ":$(dirname "$(which python3)")"
 assert_cmd_output "cargo --version" "cargo 1.80.0 (376290515 2024-07-16)"
 assert_cmd_output "rustc --version" "rustc 1.80.0 (051478957 2024-07-21)"

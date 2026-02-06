@@ -110,12 +110,16 @@ EOF
 fi
 
 set +e
-# $$ is bash's PID, $PPID is Bazel's PID.
-outer_shell_pid=$(ps -o ppid= -p $PPID | tr -d ' ')
-outer_shell_name=$(ps -p "$outer_shell_pid" -o comm= | tr -d ' ')
+# $$ is bash's PID, $PPID is whatever called bazel
+# this might be bazelisk or the user's interactive shell
+parent_name=$(ps -p $PPID -o comm= | tr -d ' ')
+if [[ "$parent_name" == *bazel* ]]; then
+  great_parent_pid=$(ps -o ppid= -p $PPID | tr -d ' ')
+  parent_name=$(ps -p "$great_parent_pid" -o comm= | tr -d ' ')
+fi
 set -e
-if [[ "$outer_shell_name" == *zsh* ]]; then
+if [[ "$parent_name" == *zsh* ]]; then
   echo "⚠️  Remember to run 'rehash' in zsh to update the locations of binaries on the PATH."
-elif [[ "$outer_shell_name" == *bash* ]]; then
+elif [[ "$parent_name" == *bash* ]]; then
   echo "⚠️  Remember to run 'hash -r' in bash to update the locations of binaries on the PATH."
 fi

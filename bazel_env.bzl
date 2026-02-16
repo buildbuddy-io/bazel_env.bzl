@@ -413,7 +413,7 @@ def _bazel_env_rule_impl(ctx):
             "{{has_toolchains}}": str(bool(ctx.attr.toolchain_targets)),
             "{{toolchains}}": "\n".join(
                 [
-                    "  * {}:{} {}".format(toolchain_info.name, (toolchain_name_pad - len(toolchain_info.name)) * " ", toolchain_info.path)
+                    "  * {}:{} .{}/toolchains/{}".format(toolchain_info.name, (toolchain_name_pad - len(toolchain_info.name)) * " ", ctx.label.name, toolchain_info.name)
                     for toolchain_info in toolchain_infos
                 ],
             ),

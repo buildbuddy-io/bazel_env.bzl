@@ -25,6 +25,9 @@ if [[ "$subcommand" != "status" ]]; then
   fail_with_usage
 fi
 
+TOOLS_BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/{{name}}/bin" && pwd -P)"
+BAZEL_ENV_ROOT="$(dirname "$TOOLS_BIN_DIR")"
+
 cd "$BUILD_WORKSPACE_DIRECTORY"
 
 cat << 'EOF'
@@ -32,6 +35,11 @@ cat << 'EOF'
 ====== {{name}} ======
 
 EOF
+
+SYMLINK_NAME=".{{name}}"
+rm -f "$SYMLINK_NAME"
+ln -s "$BAZEL_ENV_ROOT" "$SYMLINK_NAME"
+
 
 if [[ {{has_tools}} == True ]]; then
 
@@ -42,7 +50,7 @@ else
 fi
 
 if type {{unique_name_tool}} >/dev/null 2>/dev/null; then
-    echo "✅ direnv added {{bin_dir}} to PATH"
+    echo "✅ direnv added ./$SYMLINK_NAME/bin to PATH"
 else
     echo "❌ {{name}}'s bin directory is not in PATH. Please follow these steps:"
 
@@ -61,12 +69,12 @@ else
       else
         echo "$step_num. Create a .envrc file next to your MODULE.bazel file with this content:"
       fi
-      cat << 'EOF'
+      cat << EOF
 
-watch_file {{bin_dir}}
-PATH_add {{bin_dir}}
-if [[ ! -d {{bin_dir}} ]]; then
-  log_error "ERROR[bazel_env.bzl]: Run 'bazel run {{label}}' to regenerate {{bin_dir}}"
+watch_file $SYMLINK_NAME/bin
+PATH_add $SYMLINK_NAME/bin
+if [[ ! -d $SYMLINK_NAME/bin ]]; then
+  log_error "ERROR[bazel_env.bzl]: Run 'bazel run {{label}}' to regenerate $SYMLINK_NAME/bin"
 fi
 EOF
       step_num=$((step_num + 1))
@@ -74,11 +82,17 @@ EOF
 
     echo ""
     echo "$step_num. Run 'direnv allow' to allowlist your .envrc file."
+
+    if [[ -f .gitignore ]] && ! grep -q "$SYMLINK_NAME" .gitignore; then
+        echo ""
+        echo "ℹ️  Recommended: Add '$SYMLINK_NAME' to your .gitignore file."
+    fi
+    
     exit 1
 fi
 
 cleaned=0
-for f in '{{bin_dir}}'/*;
+for f in "$TOOLS_BIN_DIR"/*;
 do
   if basename "$f" | grep -q -v '{{tools_regex}}'; then
     rm -rf ./"$f"

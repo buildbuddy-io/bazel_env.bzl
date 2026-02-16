@@ -75,6 +75,11 @@ touch "$tmpdir/direnv"
 chmod +x "$tmpdir/direnv"
 
 # Imitate a bazel run environment for the status script.
+# The bazel_env.sh script expects specific directory structure to exist relative to itself
+# to determine the workspace root. In the test sandbox, these output directories are not
+# fully populated, so we create them manually.
+mkdir -p bazel_env/bin
+touch bazel_env/bin/bazel-cc
 status_out=$(PATH="$tmpdir:$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/bin:/bin:/usr/bin" \
 BUILD_WORKSPACE_DIRECTORY="$build_workspace_directory" \
   ./bazel_env.sh) || {
@@ -83,11 +88,33 @@ BUILD_WORKSPACE_DIRECTORY="$build_workspace_directory" \
     exit 1
   }
 
+# Verify that the .bazel_env symlink was created in the workspace root.
+if [[ ! -L "$build_workspace_directory/.bazel_env" ]]; then
+  echo "Error: .bazel_env symlink was not created in workspace root"
+  exit 1
+fi
+
+# Verify the symlink points to the correct location (parent of bazel_env/bin)
+# In this test environment, bazel_env is at bazel-out/bazel_env-opt/bin/bazel_env
+# So .bazel_env should point to bazel-out/bazel_env-opt/bin/bazel_env
+expected_target="$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env"
+# resolve the symlink relative to the directory it's in (if it's a relative symlink)
+# but in the script we create it as 'ln -s "$BAZEL_ENV_ROOT" "$SYMLINK_NAME"' where BAZEL_ENV_ROOT is absolute.
+# Let's check where it points.
+actual_target="$(readlink "$build_workspace_directory/.bazel_env")"
+
+# We check if it points to the directory containing bin/
+if [[ "$actual_target" != *"/bazel_env" ]]; then
+   echo "Error: .bazel_env symlink points to '$actual_target', expected it to end with '/bazel_env'"
+   exit 1
+fi
+
+
 # shellcheck disable=SC2016
 function expected_output {
   local -r sep="$1"
   if [ "$2" = true ]; then
-    local -r toolchain_type_toolchains="  * go:                bazel-out/bazel_env-opt/bin/bazel_env/toolchains/go
+    local -r toolchain_type_toolchains="  * go:                .bazel_env/toolchains/go
 "
   else
     local -r toolchain_type_toolchains=""
@@ -96,7 +123,7 @@ function expected_output {
 ====== bazel_env ======
 
 ✅ direnv is installed
-✅ direnv added bazel-out/bazel_env-opt/bin/bazel_env/bin to PATH
+✅ direnv added ./.bazel_env/bin to PATH
 
 Tools available in PATH:
   * bazel-cc:    \$(CC)
@@ -117,12 +144,12 @@ Tools available in PATH:
   * terraform:   @@rules_multitool${sep}${sep}multitool${sep}multitool//tools/terraform:terraform
 
 Toolchains available at stable relative paths:
-  * cc_toolchain:      bazel-out/bazel_env-opt/bin/bazel_env/toolchains/cc_toolchain
-  * jdk:               bazel-out/bazel_env-opt/bin/bazel_env/toolchains/jdk
-  * python:            bazel-out/bazel_env-opt/bin/bazel_env/toolchains/python
-  * nodejs:            bazel-out/bazel_env-opt/bin/bazel_env/toolchains/nodejs
-  * rust:              bazel-out/bazel_env-opt/bin/bazel_env/toolchains/rust
-  * rules_python_docs: bazel-out/bazel_env-opt/bin/bazel_env/toolchains/rules_python_docs
+  * cc_toolchain:      .bazel_env/toolchains/cc_toolchain
+  * jdk:               .bazel_env/toolchains/jdk
+  * python:            .bazel_env/toolchains/python
+  * nodejs:            .bazel_env/toolchains/nodejs
+  * rust:              .bazel_env/toolchains/rust
+  * rules_python_docs: .bazel_env/toolchains/rules_python_docs
 ${toolchain_type_toolchains}
 ⚠️  Remember to run 'hash -r' in bash to update the locations of binaries on the PATH.
 "

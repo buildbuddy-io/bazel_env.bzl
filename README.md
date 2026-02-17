@@ -154,6 +154,11 @@ The target can also be executed with `bazel run` to print the list of tools and 
 You can reduce the verbosity of what direnv prints when you enter a folder, by adjusting the `log_filter` option in `~/.config/direnv/direnv.toml`.
 See https://github.com/direnv/direnv/issues/68#issuecomment-2812015043.
 
+> [!WARNING]
+> Bazel only uses the `args` and `env` attributes of binary targets when they are directly executed via `bazel run`.
+> See https://bazel.build/reference/be/common-definitions#common-attributes-binaries
+> Since bazel_env creates a wrapper to call each tool, those attributes will be ignored when the tool is run.
+
 ## Documentation
 
 See the [generated documentation](docs-gen/bazel_env.md) for more information on the `bazel_env` rule.

@@ -200,4 +200,4 @@ case "{{rlocation_path}}" in
   /*) bin_path="{{rlocation_path}}" ;;
   *) bin_path="$RUNFILES_DIR/{{rlocation_path}}" ;;
 esac
-exec "$bin_path" "$@"
+exec "$bin_path" {{extra_args}} "$@"

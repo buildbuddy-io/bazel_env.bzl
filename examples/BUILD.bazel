@@ -122,6 +122,7 @@ sh_test(
         "HOME": "/tmp/user",
         "BAZEL_REPO_NAME_SEPARATOR": REPO_NAME_SEPARATOR,
         "TOOLCHAIN_TYPES_SUPPORTED": str(_TOOLCHAIN_TYPES_SUPPORTED).lower(),
+        "SH_BINARY_EMITS_RUN_ENVIRONMENT_INFO": str("built-in" not in str(sh_binary)).lower(),
     },
     tags = [
         # The test only depends on the bazel_env fake outputs, not the individual tools.

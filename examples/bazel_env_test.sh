@@ -162,10 +162,14 @@ assert_cmd_output "terraform --version" "Terraform v1.9.3"
 
 #### Binary args and env forwarding ####
 
-# Verify that the args attribute is forwarded before user args.
-assert_cmd_output "echo_tool --user-arg" "TOOL_VAR=from_env args=--default-arg --user-arg"
-# Verify that without extra user args, only the default args are passed.
-assert_cmd_output "echo_tool" "TOOL_VAR=from_env args=--default-arg"
+if [ "$SH_BINARY_EMITS_RUN_ENVIRONMENT_INFO" = false ]; then
+  echo "Skipping env var forwarding test since native sh_binary doesn't emit RunEnvironmentInfo."
+else
+  # Verify that the args attribute is forwarded before user args.
+  assert_cmd_output "echo_tool --user-arg" "TOOL_VAR=from_env args=--default-arg --user-arg"
+  # Verify that without extra user args, only the default args are passed.
+  assert_cmd_output "echo_tool" "TOOL_VAR=from_env args=--default-arg"
+fi
 # Verify that $(rlocationpath) in args is expanded and the file is accessible via RUNFILES_DIR.
 assert_cmd_output "loc_tool" "found: *location_test_data*"
 

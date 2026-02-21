@@ -138,6 +138,8 @@ Tools available in PATH:
   * python:      \$(PYTHON3)
   * python_tool: :python_tool
   * cargo:       @rules_rust//tools/upstream_wrapper:cargo
+  * echo_tool:   :echo_tool_bin
+  * loc_tool:    :loc_tool_bin
   * rustc:       @rules_rust//tools/upstream_wrapper:rustc
   * rustfmt:     @rules_rust//tools/upstream_wrapper:rustfmt
   * ibazel:      @@rules_multitool${sep}${sep}multitool${sep}multitool//tools/ibazel:ibazel
@@ -184,6 +186,19 @@ assert_cmd_output "rustc --version" "rustc 1.80.0 (051478957 2024-07-21)"
 assert_cmd_output "rustfmt --version" "rustfmt 1.7.0-stable (0514789* 2024-07-21)"
 assert_cmd_output "ibazel" "iBazel - Version v0.25.3"
 assert_cmd_output "terraform --version" "Terraform v1.9.3"
+
+#### Binary args and env forwarding ####
+
+if [ "$SH_BINARY_EMITS_RUN_ENVIRONMENT_INFO" = false ]; then
+  echo "Skipping env var forwarding test since native sh_binary doesn't emit RunEnvironmentInfo."
+else
+  # Verify that the args attribute is forwarded before user args.
+  assert_cmd_output "echo_tool --user-arg" "TOOL_VAR=from_env args=--default-arg --user-arg"
+  # Verify that without extra user args, only the default args are passed.
+  assert_cmd_output "echo_tool" "TOOL_VAR=from_env args=--default-arg"
+fi
+# Verify that $(rlocationpath) in args is expanded and the file is accessible via RUNFILES_DIR.
+assert_cmd_output "loc_tool" "found: *location_test_data*"
 
 #### Toolchains ####
 

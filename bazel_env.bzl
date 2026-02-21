@@ -143,6 +143,7 @@ _flip_output_dir = transition(
 
 _ToolInfo = provider(fields = ["name", "raw_tool"])
 _ToolchainInfo = provider(fields = ["files", "label", "variables"])
+_BinaryArgsInfo = provider(fields = ["args"])
 _IsToolchainTypeInfo = provider(fields = [])
 _IsToolchainType = _IsToolchainTypeInfo()
 _BAZEL_ENV_GENRULE_TAG = "bazel_env.bzl_genrule_tag"
@@ -205,6 +206,47 @@ _extract_toolchain_info = aspect(
     )
 )
 
+_STRING_TYPE = type("")
+_LIST_TYPE = type([])
+
+def _extract_binary_args_impl(target, ctx):
+    # type: (Target, ctx) -> list[Provider]
+    raw_args = getattr(ctx.rule.attr, "args", [])
+    if type(raw_args) != _LIST_TYPE or not all([type(arg) == _STRING_TYPE for arg in raw_args]):
+        return [_BinaryArgsInfo(args = [])]
+
+    # Collect targets for location expansion from common dependency attributes.
+    # Bazel's RunfilesSupport.computeArgs uses withDataLocations(), which resolves against
+    # srcs, deps, and data with rootpath (not execpath) semantics.
+    location_targets = []
+    for attr_name in ("srcs", "deps", "data"):
+        val = getattr(ctx.rule.attr, attr_name, None)
+        if val != None and type(val) == _LIST_TYPE:
+            location_targets.extend(val)
+
+    return [
+        _BinaryArgsInfo(args = [
+            ctx.expand_make_variables(
+                "args",
+                # Rewrite to $(rootpath) to match the rootpath semantics of Bazel's
+                # RunfilesSupport.computeArgs (withDataLocations with execPaths=false),
+                # since ctx.expand_location expands $(location) to execpath by default.
+                ctx.expand_location(
+                    arg.replace("$(location ", "$(rootpath ").replace("$(locations ", "$(rootpaths "),
+                    location_targets,
+                ),
+                {},
+            )
+            for arg in raw_args
+        ]),
+    ]
+
+_extract_binary_args = aspect(implementation = _extract_binary_args_impl)
+
+def _shell_quote(s):
+    # type: (string) -> string
+    return "'" + s.replace("'", "'\\''") + "'"
+
 _SHA256SUM_TOOLCHAIN_TYPE = "@rules_coreutils//coreutils/toolchain/sha256sum:type"
 
 def _tool_impl(ctx):
@@ -213,6 +255,7 @@ def _tool_impl(ctx):
     out = ctx.actions.declare_file(ctx.label.name)
 
     extra_env = {}
+    extra_args = []
     if ctx.attr.path:
         vars = {
             k: v
@@ -240,6 +283,9 @@ def _tool_impl(ctx):
         if RunEnvironmentInfo in target:
             extra_env = target[RunEnvironmentInfo].environment
 
+        if _BinaryArgsInfo in target:
+            extra_args = target[_BinaryArgsInfo].args
+
     sha256sum = ctx.toolchains[_SHA256SUM_TOOLCHAIN_TYPE]
 
     runfiles = runfiles.merge(sha256sum.default.default_runfiles)
@@ -256,6 +302,7 @@ def _tool_impl(ctx):
                 "export {}={}".format(k, repr(v))
                 for k, v in extra_env.items()
             ]),
+            "{{extra_args}}": " ".join([_shell_quote(arg) for arg in extra_args]),
         },
     )
 
@@ -275,6 +322,7 @@ _tool = rule(
     attrs = {
         "target": attr.label(
             allow_files = True,
+            aspects = [_extract_binary_args],
             cfg = _flip_output_dir,
             executable = True,
         ),

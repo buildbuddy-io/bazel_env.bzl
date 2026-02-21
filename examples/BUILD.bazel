@@ -4,6 +4,7 @@ load("@buildozer//:buildozer.bzl", "BUILDOZER_LABEL")
 load("@multitool//:tools.bzl", MULTITOOL_TOOLS = "TOOLS")
 load("@rules_python//python:py_binary.bzl", "py_binary")
 load("@rules_python//python:py_library.bzl", "py_library")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 
 # Test-only workaround for https://github.com/buildbuddy-io/bazel_env.bzl/pull/35#issuecomment-2853979830.
 # Ignore this line for the purpose of the example.
@@ -46,6 +47,8 @@ bazel_env(
         "python": "$(PYTHON3)",
         "python_tool": ":python_tool",
         "cargo": "@rules_rust//tools/upstream_wrapper:cargo",
+        "echo_tool": ":echo_tool_bin",
+        "loc_tool": ":loc_tool_bin",
         "rustc": "@rules_rust//tools/upstream_wrapper:rustc",
         "rustfmt": "@rules_rust//tools/upstream_wrapper:rustfmt",
         "ibazel": MULTITOOL_TOOLS["ibazel"],
@@ -85,6 +88,22 @@ py_library(
     tags = ["manual"],
 )
 
+sh_binary(
+    name = "echo_tool_bin",
+    srcs = ["echo_tool.sh"],
+    args = ["--default-arg"],
+    env = {"TOOL_VAR": "from_env"},
+    tags = ["manual"],
+)
+
+sh_binary(
+    name = "loc_tool_bin",
+    srcs = ["loc_tool.sh"],
+    args = ["$(rlocationpath :location_test_data.txt)"],
+    data = [":location_test_data.txt"],
+    tags = ["manual"],
+)
+
 # Lines below are not part of the example, they are used to test the example.
 
 sh_test(
@@ -103,6 +122,7 @@ sh_test(
         "HOME": "/tmp/user",
         "BAZEL_REPO_NAME_SEPARATOR": REPO_NAME_SEPARATOR,
         "TOOLCHAIN_TYPES_SUPPORTED": str(_TOOLCHAIN_TYPES_SUPPORTED).lower(),
+        "SH_BINARY_EMITS_RUN_ENVIRONMENT_INFO": str("built-in" not in str(sh_binary)).lower(),
     },
     tags = [
         # The test only depends on the bazel_env fake outputs, not the individual tools.

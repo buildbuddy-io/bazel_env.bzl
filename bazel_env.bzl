@@ -439,11 +439,19 @@ def _bazel_env_rule_impl(ctx):
         [dir.basename for dir in ctx.files.tool_dirs] +
         [file.basename for file in ctx.files.tool_files],
     )
+
+    package_name = ctx.label.package.replace("/", "_")
+    if not package_name:
+        package_name = "root"
+
+    symlink_name = ".{}".format(ctx.label.name) if package_name == "root" else ".bazel_env_{}_{}".format(package_name, ctx.label.name)
+
     ctx.actions.expand_template(
         template = ctx.file._status,
         output = status_script,
         is_executable = True,
         substitutions = {
+            "{{package_name}}": package_name,
             "{{name}}": ctx.label.name,
             # We assume that the target is in the main repo and want the label to look like this:
             # //:bazel_env
@@ -461,7 +469,7 @@ def _bazel_env_rule_impl(ctx):
             "{{has_toolchains}}": str(bool(ctx.attr.toolchain_targets)),
             "{{toolchains}}": "\n".join(
                 [
-                    "  * {}:{} .{}/toolchains/{}".format(toolchain_info.name, (toolchain_name_pad - len(toolchain_info.name)) * " ", ctx.label.name, toolchain_info.name)
+                    "  * {}:{} {}/toolchains/{}".format(toolchain_info.name, (toolchain_name_pad - len(toolchain_info.name)) * " ", symlink_name, toolchain_info.name)
                     for toolchain_info in toolchain_infos
                 ],
             ),

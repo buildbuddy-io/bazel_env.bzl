@@ -36,8 +36,18 @@ cat << 'EOF'
 
 EOF
 
-SYMLINK_NAME=".{{name}}"
-rm -f "$SYMLINK_NAME"
+if [[ "{{package_name}}" == "root" ]]; then
+  SYMLINK_NAME=".{{name}}"
+else
+  SYMLINK_NAME=".bazel_env_{{package_name}}_{{name}}"
+fi
+
+if [[ -L "$SYMLINK_NAME" || ! -e "$SYMLINK_NAME" ]]; then
+  rm -f "$SYMLINK_NAME"
+else
+  echo "Error: '$SYMLINK_NAME' exists and is not a symlink. Aborting to prevent data loss." >&2
+  exit 1
+fi
 ln -s "$BAZEL_ENV_ROOT" "$SYMLINK_NAME"
 
 
@@ -83,7 +93,7 @@ EOF
     echo ""
     echo "$step_num. Run 'direnv allow' to allowlist your .envrc file."
 
-    if [[ -f .gitignore ]] && ! grep -q "$SYMLINK_NAME" .gitignore; then
+    if ! git check-ignore -q "$SYMLINK_NAME" 2>/dev/null; then
         echo ""
         echo "ℹ️  Recommended: Add '$SYMLINK_NAME' to your .gitignore file."
     fi
@@ -120,6 +130,7 @@ cat << 'EOF'
 Toolchains available at stable relative paths:
 {{toolchains}}
 
+⚠️  Remember previous {{bin_dir}} dynamic path continues to work.
 EOF
 fi
 

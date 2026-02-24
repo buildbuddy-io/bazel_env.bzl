@@ -1,3 +1,4 @@
+.bazel_env
 bazel-*
 MODULE.bazel.lock
 .ijwb

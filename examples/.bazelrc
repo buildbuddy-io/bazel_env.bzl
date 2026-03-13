@@ -26,7 +26,7 @@ common --action_env=JAVA_HOME=../bazel_tools/jdk
 common --check_direct_dependencies=off
 
 # Be more helpful for debugging CI failures
-common --test_output=streamed
+common --test_output=errors
 
 # Note: symlinks and runfiles disabled by default on Windows
 # bazel_env.bzl does not require either symlinks or runfiles

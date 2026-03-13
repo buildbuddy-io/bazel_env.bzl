@@ -1,3 +1,5 @@
+load("@aspect_bazel_lib//lib:paths.bzl", "to_rlocation_path")
+load("@aspect_bazel_lib//lib:windows_utils.bzl", "BATCH_RLOCATION_FUNCTION")
 load("@bazel_features//:features.bzl", "bazel_features")
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
 
@@ -251,8 +253,10 @@ _SHA256SUM_TOOLCHAIN_TYPE = "@rules_coreutils//coreutils/toolchain/sha256sum:typ
 
 def _tool_impl(ctx):
     # type: (ctx) -> list[Provider]
+    is_windows = _windows_host(ctx)
     name = ctx.label.name.rpartition("/")[-1]
-    out = ctx.actions.declare_file(ctx.label.name)
+    out_name = ctx.label.name + (".bat" if is_windows else "")
+    out = ctx.actions.declare_file(out_name)
 
     extra_env = {}
     extra_args = []
@@ -275,7 +279,7 @@ def _tool_impl(ctx):
         # There is only ever a single target, the attribute only takes an array value because of the transition.
         target = ctx.attr.target[0]
 
-        rlocation_path = _rlocation_path(ctx, ctx.executable.target)
+        rlocation_path = _rlocation_path(ctx, ctx.executable.target) if not is_windows else to_rlocation_path(ctx, ctx.executable.target)
 
         runfiles = ctx.runfiles(ctx.files.target)
         runfiles = runfiles.merge(target[DefaultInfo].default_runfiles)
@@ -290,21 +294,44 @@ def _tool_impl(ctx):
 
     runfiles = runfiles.merge(sha256sum.default.default_runfiles)
 
-    ctx.actions.expand_template(
-        template = ctx.file._launcher,
-        output = out,
-        is_executable = True,
-        substitutions = {
-            "{{bazel_env_label}}": str(ctx.label).removeprefix("@@").removesuffix("/bin/" + name),
-            "{{rlocation_path}}": rlocation_path,
-            "{{sha256sum_rlocation_path}}": _rlocation_path(ctx, sha256sum.run.executable),
-            "{{extra_env}}": "\n".join([
-                "export {}={}".format(k, repr(v))
-                for k, v in extra_env.items()
-            ]),
-            "{{extra_args}}": " ".join([_shell_quote(arg) for arg in extra_args]),
-        },
-    )
+    if is_windows:
+        def unquote(str):
+            if str.startswith('"') and str.endswith('"'):
+                return str[1:-1]
+            else:
+                return str
+        ctx.actions.expand_template(
+            template = ctx.file._launcher_windows,
+            output = out,
+            is_executable = True,
+            substitutions = {
+                "{{bazel_env_label}}": str(ctx.label).removeprefix("@@").removesuffix("/bin/" + name),
+                "{{rlocation_path}}": rlocation_path,
+                "{{sha256sum_rlocation_path}}": _rlocation_path(ctx, sha256sum.run.executable),
+                "{{extra_env}}": "\n".join([
+                    "set \"{}={}\"".format(k, unquote(repr(v)))
+                    for k, v in extra_env.items()
+                ]),
+                "{{batch_rlocation_function}}": BATCH_RLOCATION_FUNCTION,
+                "{{extra_args}}": " ".join([_shell_quote(arg) for arg in extra_args]),
+            },
+        )
+    else:
+        ctx.actions.expand_template(
+            template = ctx.file._launcher,
+            output = out,
+            is_executable = True,
+            substitutions = {
+                "{{bazel_env_label}}": str(ctx.label).removeprefix("@@").removesuffix("/bin/" + name),
+                "{{rlocation_path}}": rlocation_path,
+                "{{sha256sum_rlocation_path}}": _rlocation_path(ctx, sha256sum.run.executable),
+                "{{extra_env}}": "\n".join([
+                    "export {}={}".format(k, repr(v))
+                    for k, v in extra_env.items()
+                ]),
+                "{{extra_args}}": " ".join([_shell_quote(arg) for arg in extra_args]),
+            },
+        )
 
     return [
         DefaultInfo(
@@ -338,6 +365,13 @@ _tool = rule(
             default = ":launcher.sh.tpl",
             executable = True,
         ),
+        "_launcher_windows": attr.label(
+            allow_single_file = True,
+            cfg = _flip_output_dir,
+            default = ":launcher.bat.tpl",
+            executable = True,
+        ),
+        "_windows_constraint": attr.label(default = "@platforms//os:windows"),
     },
     executable = True,
     toolchains = [_SHA256SUM_TOOLCHAIN_TYPE],
@@ -395,11 +429,20 @@ _toolchain = rule(
     },
 )
 
+def _windows_host(ctx):
+    """Returns true if the host platform is windows.
+    
+    The typical approach using ctx.target_platform_has_constraint does not work for transitioned
+    build targets. We need to know the host platform, not the target platform.
+    """
+    return ctx.configuration.host_path_separator == ";"
+
 def _bazel_env_rule_impl(ctx):
     # type: (ctx) -> list[Provider]
     implicit_out = ctx.actions.declare_file(ctx.label.name + "_all_tools")
 
-    unique_name_tool = ctx.attr.unique_name_tool[DefaultInfo].files.to_list()[0]
+    is_windows = _windows_host(ctx)
+    unique_name_tool = ctx.attr.unique_name_tool[DefaultInfo].files.to_list()[0] if not is_windows else ctx.attr.unique_name_tool_windows[DefaultInfo].files.to_list()[0]
 
     # It is not necessary to stage the toolchain files (which are in runfiles) as inputs as their
     # repos have already been fetched before the toolchain rules were analyzed.
@@ -432,15 +475,19 @@ def _bazel_env_rule_impl(ctx):
     ) for toolchain in ctx.attr.toolchain_targets]
     toolchain_name_pad = max([len(toolchain_info.name) for toolchain_info in toolchain_infos] + [0])
 
-    status_script = ctx.actions.declare_file(ctx.label.name + ".sh")
-    tool_regex = "\\|".join(
+    status_script = ctx.actions.declare_file(ctx.label.name + (".bat" if is_windows else ".sh"))
+    regex_or = "|" if is_windows else "\\|"
+    tool_regex = regex_or.join(
         [tool_info.name for tool_info in tool_infos] +
-        [unique_name_tool.basename, ctx.file.all_tools_file.basename] +
+        [unique_name_tool.basename.removesuffix(".bat"), ctx.file.all_tools_file.basename] +
         [dir.basename for dir in ctx.files.tool_dirs] +
         [file.basename for file in ctx.files.tool_files],
     )
+    if is_windows:
+        tool_regex = "\\b("+tool_regex+")\\b"
+    echo_cmd = "echo " if is_windows else ""
     ctx.actions.expand_template(
-        template = ctx.file._status,
+        template = ctx.file._status_windows if is_windows else ctx.file._status,
         output = status_script,
         is_executable = True,
         substitutions = {
@@ -448,20 +495,20 @@ def _bazel_env_rule_impl(ctx):
             # We assume that the target is in the main repo and want the label to look like this:
             # //:bazel_env
             "{{label}}": str(ctx.label).removeprefix("@@"),
-            "{{bin_dir}}": unique_name_tool.dirname,
+            "{{bin_dir}}": unique_name_tool.dirname if not is_windows else unique_name_tool.dirname.replace("/", "\\"),
             "{{unique_name_tool}}": unique_name_tool.basename,
             "{{has_tools}}": str(bool(tool_infos)),
             "{{tools_regex}}": tool_regex,
             "{{tools}}": "\n".join(
                 [
-                    "  * {}:{} {}".format(tool_info.name, (tool_name_pad - len(tool_info.name)) * " ", tool_info.raw_tool)
+                    "{}  * {}:{} {}".format(echo_cmd, tool_info.name, (tool_name_pad - len(tool_info.name)) * " ", tool_info.raw_tool)
                     for tool_info in tool_infos
                 ],
             ),
             "{{has_toolchains}}": str(bool(ctx.attr.toolchain_targets)),
             "{{toolchains}}": "\n".join(
                 [
-                    "  * {}:{} {}".format(toolchain_info.name, (toolchain_name_pad - len(toolchain_info.name)) * " ", toolchain_info.path)
+                    "{}  * {}:{} {}".format(echo_cmd, toolchain_info.name, (toolchain_name_pad - len(toolchain_info.name)) * " ", toolchain_info.path)
                     for toolchain_info in toolchain_infos
                 ],
             ),
@@ -483,6 +530,7 @@ _bazel_env_rule = rule(
         "tool_dirs": attr.label_list(allow_files = True),
         "tool_files": attr.label_list(allow_files = True),
         "unique_name_tool": attr.label(),
+        "unique_name_tool_windows": attr.label(),
         "tool_targets": attr.label_list(
             providers = [_ToolInfo],
         ),
@@ -495,6 +543,13 @@ _bazel_env_rule = rule(
             default = ":status.sh.tpl",
             executable = True,
         ),
+        "_status_windows": attr.label(
+            allow_single_file = True,
+            cfg = "target",
+            default = ":status.bat.tpl",
+            executable = True,
+        ),
+        "_windows_constraint": attr.label(default = "@platforms//os:windows"),
     },
     executable = True,
 )
@@ -506,7 +561,7 @@ def _write_watch_dirs(name, tool_name, dirs):
     write_file(
         name = watch_file,
         out = watch_file + ".txt",
-        content = [" " + " ".join(dirs) + " "],
+        content = ["\n".join(dirs)],
         is_executable = False,
         visibility = ["//visibility:private"],
         tags = ["manual"],
@@ -518,7 +573,7 @@ def _write_watch_files(name, tool_name, files):
     write_file(
         name = watch_file,
         out = watch_file + ".txt",
-        content = [" " + " ".join(files) + " "],
+        content = ["\n".join(files)],
         is_executable = False,
         visibility = ["//visibility:private"],
         tags = ["manual"],
@@ -611,6 +666,14 @@ def bazel_env(*, name, tools = {}, toolchains = {}, watch_dirs = {}, watch_files
         name = unique_name_tool,
         out = unique_name_tool + ".sh",
         content = ["#!/usr/bin/env bash", "exit 0"],
+        is_executable = True,
+        visibility = ["//visibility:private"],
+        tags = ["manual"],
+    )
+    write_file(
+        name = unique_name_tool+"_windows",
+        out = unique_name_tool + ".bat",
+        content = ["@echo off", "exit 0"],
         is_executable = True,
         visibility = ["//visibility:private"],
         tags = ["manual"],
@@ -727,6 +790,7 @@ def bazel_env(*, name, tools = {}, toolchains = {}, watch_dirs = {}, watch_files
         tool_dirs = tool_dirs,
         tool_files = tool_files,
         unique_name_tool = unique_name_tool,
+        unique_name_tool_windows = unique_name_tool + "_windows",
         tool_targets = tool_targets,
         toolchain_targets = toolchain_targets,
         **kwargs

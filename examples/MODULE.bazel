@@ -9,21 +9,24 @@ local_path_override(
     path = "..",
 )
 
-bazel_dep(name = "aspect_rules_js", version = "2.0.0-rc4")
+bazel_dep(name = "aspect_rules_js", version = "2.9.2")
 bazel_dep(name = "bazel_features", version = "1.36.0")
 bazel_dep(name = "buildifier_prebuilt", version = "7.3.1")
 bazel_dep(name = "buildozer")
 bazel_dep(name = "platforms", version = "1.0.0")
-bazel_dep(name = "rules_go", version = "0.59.0")
+bazel_dep(name = "rules_go", version = "0.60.0")
 bazel_dep(name = "rules_java", version = "9.5.0")
 bazel_dep(name = "rules_multitool", version = "1.3.0")
-bazel_dep(name = "rules_nodejs", version = "6.3.5")
+bazel_dep(name = "rules_nodejs", version = "6.7.3")
 bazel_dep(name = "rules_python", version = "1.7.0")
+# rules_rust 0.63 doesn't work on Windows.
+# However: can't update beyond 0.63 due to 'multiple files' error
+# https://github.com/buildbuddy-io/bazel_env.bzl/issues/51
 bazel_dep(name = "rules_rust", version = "0.63.0")
 bazel_dep(name = "rules_shell", version = "0.6.1")
 
 # Required for compatibility with recent clang versions on macOS.
-bazel_dep(name = "rules_cc", version = "0.2.16")
+bazel_dep(name = "rules_cc", version = "0.2.17")
 
 # Required for compatibility with Bazel@HEAD.
 single_version_override(
@@ -38,14 +41,16 @@ single_version_override(
 
 bazel_dep(name = "aspect_bazel_lib", version = "2.19.2")
 
-register_execution_platforms(
-    "//:exotic_platform",
-)
+# This doesn't seem to work on Windows, results in:
+# Error in fail: Unable to find a CC toolchain using toolchain resolution. Target: @@rules_cc+//cc:current_cc_toolchain, Platform: @@//:exotic_platform, Exec platform: @@bazel_tools//tools:host_platform
+# register_execution_platforms(
+#     "//:exotic_platform",
+# )
 
 # Don't update the versions below, they are only used to verify the hermeticity of bazel_env.
 
 go_sdk = use_extension("@rules_go//go:extensions.bzl", "go_sdk")
-go_sdk.download(version = "1.21.13")
+go_sdk.download(version = "1.25.0")
 
 node = use_extension("@rules_nodejs//nodejs:extensions.bzl", "node")
 node.toolchain(

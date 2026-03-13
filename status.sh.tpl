@@ -45,6 +45,8 @@ if type {{unique_name_tool}} >/dev/null 2>/dev/null; then
     echo "✅ direnv added {{bin_dir}} to PATH"
 else
     echo "❌ {{name}}'s bin directory is not in PATH. Please follow these steps:"
+    echo "can't find {{unique_name_tool}} in $BUILD_WORKSPACE_DIRECTORY"
+    ls $BUILD_WORKSPACE_DIRECTORY
 
     step_num=1
     

@@ -16,3 +16,17 @@ common --nobuild_runfile_links
 common --enable_platform_specific_config
 common:macos --platform_suffix=mac
 common:linux --platform_suffix=linux
+
+# Point tools such as coursier (used in rules_jvm_external) to Bazel's downloaded JDK
+# suggested in https://github.com/bazelbuild/rules_jvm_external/issues/445
+common --repo_env=JAVA_HOME=../bazel_tools/jdk
+common --action_env=JAVA_HOME=../bazel_tools/jdk
+
+# Don't encourage developers of this repo to bump dependencies
+common --check_direct_dependencies=off
+
+# Be more helpful for debugging CI failures
+common --test_output=streamed
+
+# Note: symlinks and runfiles disabled by default on Windows
+# bazel_env.bzl does not require either symlinks or runfiles

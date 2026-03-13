@@ -17,7 +17,9 @@ exports_files(
 
 exports_files(
     [
+        "status.bat.tpl",
         "status.sh.tpl",
+        "launcher.bat.tpl",
         "launcher.sh.tpl",
     ],
     visibility = ["//visibility:private"],

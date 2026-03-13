@@ -38,7 +38,7 @@ jobs:
       fail-fast: false
       matrix:
         bazel: [7.*, 8.*, 9.*, last_green]
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     env:
       BAZELISK_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -55,7 +55,8 @@ jobs:
       - name: Sanitize Bazel version
         if: always()
         id: bazel-version
-        run: echo "name=$(echo '${{ matrix.bazel }}' | tr '*' 'x')" >> $GITHUB_OUTPUT
+        shell: bash
+        run: echo "name=$(echo '${{ matrix.bazel }}' | tr '\*' 'x')" >> $GITHUB_OUTPUT
 
       - name: Upload test logs
         if: always()

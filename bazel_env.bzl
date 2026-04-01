@@ -440,26 +440,21 @@ def _bazel_env_rule_impl(ctx):
         [file.basename for file in ctx.files.tool_files],
     )
 
-    package_name = ctx.label.package.replace("/", "_")
-    if not package_name:
-        package_name = "root"
-
-    symlink_name = ".{}".format(ctx.label.name) if package_name == "root" else ".bazel_env_{}_{}".format(package_name, ctx.label.name)
+    symlink_name = ".{}".format(ctx.label.name)
 
     ctx.actions.expand_template(
         template = ctx.file._status,
         output = status_script,
         is_executable = True,
         substitutions = {
-            "{{package_name}}": package_name,
+            "{{package_path}}": ctx.label.package,
             "{{name}}": ctx.label.name,
-            # We assume that the target is in the main repo and want the label to look like this:
-            # //:bazel_env
             "{{label}}": str(ctx.label).removeprefix("@@"),
             "{{bin_dir}}": unique_name_tool.dirname,
             "{{unique_name_tool}}": unique_name_tool.basename,
             "{{has_tools}}": str(bool(tool_infos)),
             "{{tools_regex}}": tool_regex,
+            "{{symlink_name}}": symlink_name,
             "{{tools}}": "\n".join(
                 [
                     "  * {}:{} {}".format(tool_info.name, (tool_name_pad - len(tool_info.name)) * " ", tool_info.raw_tool)

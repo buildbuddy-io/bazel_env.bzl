@@ -28,7 +28,13 @@ fi
 TOOLS_BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/{{name}}/bin" && pwd -P)"
 BAZEL_ENV_ROOT="$(dirname "$TOOLS_BIN_DIR")"
 
-cd "$BUILD_WORKSPACE_DIRECTORY"
+cd "$BUILD_WORKSPACE_DIRECTORY/{{package_path}}"
+
+if [[ -z "{{package_path}}" ]]; then
+  DISPLAY_DIR="the workspace root"
+else
+  DISPLAY_DIR="{{package_path}}/"
+fi
 
 cat << 'EOF'
 
@@ -36,18 +42,15 @@ cat << 'EOF'
 
 EOF
 
-if [[ "{{package_name}}" == "root" ]]; then
-  SYMLINK_NAME=".{{name}}"
-else
-  SYMLINK_NAME=".bazel_env_{{package_name}}_{{name}}"
-fi
+SYMLINK_NAME="{{symlink_name}}"
 
 if [[ -L "$SYMLINK_NAME" || ! -e "$SYMLINK_NAME" ]]; then
-  rm -f "$SYMLINK_NAME"
+  rm "$SYMLINK_NAME" 2>/dev/null || true
 else
   echo "Error: '$SYMLINK_NAME' exists and is not a symlink. Aborting to prevent data loss." >&2
   exit 1
 fi
+
 ln -s "$BAZEL_ENV_ROOT" "$SYMLINK_NAME"
 
 
@@ -65,7 +68,7 @@ else
     echo "❌ {{name}}'s bin directory is not in PATH. Please follow these steps:"
 
     step_num=1
-    
+
     if [[ -z "${DIRENV_DIR:-}" ]]; then
       echo ""
       echo "$step_num. Enable direnv's shell hook as described in https://direnv.net/docs/hook.html."
@@ -75,9 +78,9 @@ else
     if ! grep -qE '[[:<:]]bazel_env[[:>:]]' .envrc 2>/dev/null; then
       echo ""
       if [[ -f .envrc ]]; then
-        echo "$step_num. Add the following content to your existing .envrc file:"
+        echo "$step_num. Add the following content to your existing .envrc file in $DISPLAY_DIR:"
       else
-        echo "$step_num. Create a .envrc file next to your MODULE.bazel file with this content:"
+        echo "$step_num. Create a .envrc file in $DISPLAY_DIR with this content:"
       fi
       cat << EOF
 
@@ -93,11 +96,13 @@ EOF
     echo ""
     echo "$step_num. Run 'direnv allow' to allowlist your .envrc file."
 
-    if ! git check-ignore -q "$SYMLINK_NAME" 2>/dev/null; then
-        echo ""
-        echo "ℹ️  Recommended: Add '$SYMLINK_NAME' to your .gitignore file."
+    if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      if ! git check-ignore -q "$SYMLINK_NAME" 2>/dev/null; then
+          echo ""
+          echo "ℹ️  Recommended: Add '$SYMLINK_NAME' to your .gitignore file."
+      fi
     fi
-    
+
     exit 1
 fi
 

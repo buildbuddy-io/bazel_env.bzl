@@ -187,6 +187,8 @@ export JAVA_RUNFILES="${RUNFILES_DIR}"
 export PYTHON_RUNFILES="${RUNFILES_DIR}"
 # Let rules_js' js_binary work by not having it try to cd into BINDIR.
 export JS_BINARY__NO_CD_BINDIR=1
+# Let rules_js's js_binary work by allowing it to follow symlinks outside of sandbox.
+export JS_BINARY__PATCH_NODE_FS=0
 # Environment of the executable target.
 {{extra_env}}
 

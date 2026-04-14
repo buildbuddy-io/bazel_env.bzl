@@ -4,6 +4,9 @@ set -euo pipefail
 
 build_workspace_directory="$(dirname "$(readlink -f MODULE.bazel)")"
 
+# This test runs against a local workspace, so clear any prior watch state.
+rm -f "$build_workspace_directory/bazel_env.lock"
+
 # Run a command with a minimal PATH including the bazel_env and assert its
 # output, possibly with wildcards.
 function assert_cmd_output() {
@@ -48,6 +51,19 @@ function assert_contains() {
     echo "$content"
     exit 1
   }
+}
+
+function run_cmd() {
+  local -r cmd="$1"
+  local -r extra_path="${2:-}"
+
+  env \
+    -u TEST_SRCDIR \
+    -u RUNFILES_DIR \
+    -u RUNFILES_MANIFEST_FILE \
+    BAZEL=./fake_bazel.sh \
+    PATH="$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/bin:/bin:/usr/bin$extra_path" \
+    $cmd 2>&1
 }
 
 #### Status script ####
@@ -154,6 +170,51 @@ assert_cmd_output "python --version" "Python 3.11.8"
 # python_tool has its own watch_files, so first call triggers rebuild.
 assert_cmd_output "python_tool" "Detected changes in watched files, rebuilding bazel_env..." ":$(dirname "$(which python3)")"
 assert_cmd_output "python_tool" "python_tool version 0.0.1" ":$(dirname "$(which python3)")"
+
+#### Stale runfiles ####
+
+python_tool_path="$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/bin/python_tool"
+python_tool_runfiles_dir="$python_tool_path.runfiles/_main"
+python_tool_runfile="$python_tool_runfiles_dir/python_tool.py"
+python_tool_manifest="$python_tool_path.runfiles_manifest"
+module_bazel_backup=$(mktemp)
+cp "$build_workspace_directory/MODULE.bazel" "$module_bazel_backup"
+
+expected_python_tool_target="$(awk '$1 == "_main/python_tool.py" { print $2 }' "$python_tool_manifest")"
+if [[ -z "$expected_python_tool_target" ]]; then
+  echo "python_tool.runfiles_manifest did not contain _main/python_tool.py"
+  exit 1
+fi
+
+chmod u+w "$python_tool_runfiles_dir"
+rm "$python_tool_runfile"
+ln -s /does/not/exist "$python_tool_runfile"
+
+# Touching a watched file forces the bazel_env launcher down its rebuild path.
+# Even if the rebuild command itself succeeds, bazel_env should not re-exec a
+# wrapper whose runfiles tree is still stale.
+printf '\n# stale runfiles test\n' >> "$build_workspace_directory/MODULE.bazel"
+
+if stale_runfiles_output="$(run_cmd "python_tool" ":$(dirname "$(which python3)")")"; then
+  stale_runfiles_status=0
+else
+  stale_runfiles_status=$?
+fi
+
+cp "$module_bazel_backup" "$build_workspace_directory/MODULE.bazel"
+rm -f "$module_bazel_backup"
+rm -f "$python_tool_runfile"
+ln -s "$expected_python_tool_target" "$python_tool_runfile"
+
+if [[ $stale_runfiles_status -ne 0 ]]; then
+  echo "Expected bazel_env rebuild to repair stale runfiles for python_tool:"
+  echo "$stale_runfiles_output"
+  exit 1
+fi
+
+assert_contains "Detected changes in watched files, rebuilding bazel_env..." "$stale_runfiles_output"
+assert_contains "python_tool version 0.0.1" "$stale_runfiles_output"
+
 assert_cmd_output "cargo --version" "cargo 1.80.0 (376290515 2024-07-16)"
 assert_cmd_output "rustc --version" "rustc 1.80.0 (051478957 2024-07-21)"
 assert_cmd_output "rustfmt --version" "rustfmt 1.7.0-stable (0514789* 2024-07-21)"

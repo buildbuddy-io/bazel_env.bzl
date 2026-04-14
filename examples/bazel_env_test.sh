@@ -3,6 +3,7 @@
 set -euo pipefail
 
 build_workspace_directory="$(dirname "$(readlink -f MODULE.bazel)")"
+sha256sum_bin="$(command -v sha256sum 2>/dev/null || echo /sbin/sha256sum)"
 
 # This test runs against a local workspace, so clear any prior watch state.
 rm -f "$build_workspace_directory/bazel_env.lock"
@@ -205,6 +206,12 @@ cp "$module_bazel_backup" "$build_workspace_directory/MODULE.bazel"
 rm -f "$module_bazel_backup"
 rm -f "$python_tool_runfile"
 ln -s "$expected_python_tool_target" "$python_tool_runfile"
+{
+  "$sha256sum_bin" "$build_workspace_directory/MODULE.bazel"
+  "$sha256sum_bin" "$build_workspace_directory/BUILD.bazel"
+  "$sha256sum_bin" "$build_workspace_directory/python_tool.py"
+  "$sha256sum_bin" "$build_workspace_directory/python_tool_lib.py"
+} > "$build_workspace_directory/bazel_env.lock"
 
 if [[ $stale_runfiles_status -ne 0 ]]; then
   echo "Expected bazel_env rebuild to repair stale runfiles for python_tool:"

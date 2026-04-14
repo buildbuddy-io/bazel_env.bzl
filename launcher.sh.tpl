@@ -42,6 +42,72 @@ _bazel__get_source_workspace_path() {
   fi
 }
 
+_bazel__repair_runfiles() {
+  local runfiles_dir="$1"
+  local manifest="$2"
+
+  if [[ ! -f "$manifest" ]]; then
+    return
+  fi
+
+  mkdir -p "$runfiles_dir"
+
+  local manifest_link="$runfiles_dir/MANIFEST"
+  if [[ ! -L "$manifest_link" || "$(readlink "$manifest_link" || true)" != "$manifest" ]]; then
+    rm -rf "$manifest_link"
+    ln -s "$manifest" "$manifest_link"
+  fi
+
+  local line=""
+  local rlocation=""
+  local target=""
+  local destination=""
+  local current_target=""
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ -n "$line" ]] || continue
+
+    if [[ "$line" == ' '* ]]; then
+      line="${line# }"
+    fi
+
+    rlocation="${line%% *}"
+    if [[ "$line" == "$rlocation" ]]; then
+      target=""
+    else
+      target="${line#"$rlocation "}"
+    fi
+
+    rlocation="${rlocation//\\s/ }"
+    rlocation="${rlocation//\\n/$'\n'}"
+    rlocation="${rlocation//\\r/$'\r'}"
+    rlocation="${rlocation//\\t/$'\t'}"
+    rlocation="${rlocation//\\b/$'\b'}"
+    rlocation="${rlocation//\\\\/\\}"
+
+    destination="$runfiles_dir/$rlocation"
+    mkdir -p "$(dirname "$destination")"
+
+    if [[ -z "$target" ]]; then
+      if [[ -L "$destination" || -d "$destination" ]]; then
+        rm -rf "$destination"
+      fi
+      if [[ ! -f "$destination" ]]; then
+        : > "$destination"
+      fi
+      continue
+    fi
+
+    current_target=""
+    if [[ -L "$destination" ]]; then
+      current_target="$(readlink "$destination" || true)"
+    fi
+    if [[ ! -L "$destination" || "$current_target" != "$target" ]]; then
+      rm -rf "$destination"
+      ln -s "$target" "$destination"
+    fi
+  done < "$manifest"
+}
+
 case "${BASH_SOURCE[0]}" in
   /*) own_path="${BASH_SOURCE[0]}" ;;
   *) own_path="$PWD/${BASH_SOURCE[0]}" ;;
@@ -172,6 +238,9 @@ if [[ $rebuild_env == True && "${BAZEL_ENV_INTERNAL_EXEC:-False}" != True ]]; th
   ' <(printf "%s\n" "${files_to_watch[@]}") "$lock_file" > "$tmp" 2>/dev/null || true
   "$sha256_cmd" "${files_to_watch[@]}" >> "$tmp"
   mv "$tmp" "$lock_file"
+  # If Bazel reused cached outputs, the wrapper's runfiles tree may still be stale.
+  # Rehydrate it from the manifest before re-execing this tool.
+  _bazel__repair_runfiles "${own_path}.runfiles" "${own_path}.runfiles_manifest"
   BAZEL_ENV_INTERNAL_EXEC=True exec "$own_path" "$@"
 fi
 

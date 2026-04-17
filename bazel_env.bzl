@@ -410,9 +410,11 @@ def _bazel_env_rule_impl(ctx):
         outputs = [implicit_out],
         inputs = depset(direct_inputs, transitive = transitive_inputs),
         tools = tools,
-        command = """
-        touch "$1"
-        """,
+        # Use the bash builtin `:` (true) with output redirection instead of
+        # `touch`, which is an external command that requires PATH. Unpatched
+        # Bazel binaries (e.g. via bazelisk on NixOS) run shell actions with a
+        # stripped environment where external commands are not available.
+        command = """: > "$1" """,
         arguments = [implicit_out.path],
         # Run this action locally to force the runfiles directories for the tools to be created even
         # with --nobuild_runfile_links.
@@ -658,8 +660,9 @@ def bazel_env(*, name, tools = {}, toolchains = {}, watch_dirs = {}, watch_files
             name = toolchain_genrule_name,
             outs = [toolchain_genrule_name + ".txt"],
             # This genrule is never built and tagged as manual, but if a user
-            # ends up requesting it, it should not fail.
-            cmd = "touch $@",
+            # ends up requesting it, it should not fail. Use the bash builtin
+            # `:` instead of `touch` to avoid depending on PATH.
+            cmd = ": > $@",
             toolchains = [toolchain],
             visibility = ["//visibility:private"],
             tags = [

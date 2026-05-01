@@ -25,13 +25,34 @@ if [[ "$subcommand" != "status" ]]; then
   fail_with_usage
 fi
 
-cd "$BUILD_WORKSPACE_DIRECTORY"
+TOOLS_BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/{{name}}/bin" && pwd -P)"
+BAZEL_ENV_ROOT="$(dirname "$TOOLS_BIN_DIR")"
+
+cd "$BUILD_WORKSPACE_DIRECTORY/{{package_path}}"
+
+if [[ -z "{{package_path}}" ]]; then
+  DISPLAY_DIR="the workspace root"
+else
+  DISPLAY_DIR="{{package_path}}/"
+fi
 
 cat << 'EOF'
 
 ====== {{name}} ======
 
 EOF
+
+SYMLINK_NAME="{{symlink_name}}"
+
+if [[ -L "$SYMLINK_NAME" || ! -e "$SYMLINK_NAME" ]]; then
+  rm "$SYMLINK_NAME" 2>/dev/null || true
+else
+  echo "Error: '$SYMLINK_NAME' exists and is not a symlink. Aborting to prevent data loss." >&2
+  exit 1
+fi
+
+ln -s "$BAZEL_ENV_ROOT" "$SYMLINK_NAME"
+
 
 if [[ {{has_tools}} == True ]]; then
 
@@ -42,12 +63,12 @@ else
 fi
 
 if type {{unique_name_tool}} >/dev/null 2>/dev/null; then
-    echo "✅ direnv added {{bin_dir}} to PATH"
+    echo "✅ direnv added ./$SYMLINK_NAME/bin to PATH"
 else
     echo "❌ {{name}}'s bin directory is not in PATH. Please follow these steps:"
 
     step_num=1
-    
+
     if [[ -z "${DIRENV_DIR:-}" ]]; then
       echo ""
       echo "$step_num. Enable direnv's shell hook as described in https://direnv.net/docs/hook.html."
@@ -57,16 +78,16 @@ else
     if ! grep -qE '[[:<:]]bazel_env[[:>:]]' .envrc 2>/dev/null; then
       echo ""
       if [[ -f .envrc ]]; then
-        echo "$step_num. Add the following content to your existing .envrc file:"
+        echo "$step_num. Add the following content to your existing .envrc file in $DISPLAY_DIR:"
       else
-        echo "$step_num. Create a .envrc file next to your MODULE.bazel file with this content:"
+        echo "$step_num. Create a .envrc file in $DISPLAY_DIR with this content:"
       fi
-      cat << 'EOF'
+      cat << EOF
 
-watch_file {{bin_dir}}
-PATH_add {{bin_dir}}
-if [[ ! -d {{bin_dir}} ]]; then
-  log_error "ERROR[bazel_env.bzl]: Run 'bazel run {{label}}' to regenerate {{bin_dir}}"
+watch_file $SYMLINK_NAME/bin
+PATH_add $SYMLINK_NAME/bin
+if [[ ! -d $SYMLINK_NAME/bin ]]; then
+  log_error "ERROR[bazel_env.bzl]: Run 'bazel run {{label}}' to regenerate $SYMLINK_NAME/bin"
 fi
 EOF
       step_num=$((step_num + 1))
@@ -74,11 +95,19 @@ EOF
 
     echo ""
     echo "$step_num. Run 'direnv allow' to allowlist your .envrc file."
+
+    if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      if ! git check-ignore -q "$SYMLINK_NAME" 2>/dev/null; then
+          echo ""
+          echo "ℹ️  Recommended: Add '$SYMLINK_NAME' to your .gitignore file."
+      fi
+    fi
+
     exit 1
 fi
 
 cleaned=0
-for f in '{{bin_dir}}'/*;
+for f in "$TOOLS_BIN_DIR"/*;
 do
   if basename "$f" | grep -q -v '{{tools_regex}}'; then
     rm -rf ./"$f"
@@ -106,6 +135,7 @@ cat << 'EOF'
 Toolchains available at stable relative paths:
 {{toolchains}}
 
+⚠️  Remember previous {{bin_dir}} dynamic path continues to work.
 EOF
 fi
 

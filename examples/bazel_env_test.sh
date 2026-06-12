@@ -217,3 +217,46 @@ if echo "$external_output" | grep -q "^find:"; then
   echo "$external_output"
   exit 1
 fi
+
+#### Auto-rebuild logs go to stderr, not stdout ####
+
+# When watched files change, the launcher runs a bazel build to rebuild
+# bazel_env. Those build logs must go to stderr so they don't pollute the
+# wrapped tool's stdout and break piping. fake_bazel.sh emits "Fake Bazel
+# stdout" on stdout and "Fake Bazel stderr" on stderr; after the redirect both
+# should end up on the launcher's stderr.
+
+# Remove the lock file to force a rebuild on the next tool invocation.
+rm -f "$build_workspace_directory/bazel_env.lock"
+
+rebuild_stdout=$(mktemp)
+rebuild_stderr=$(mktemp)
+rebuild_marker=$(mktemp)
+trap 'rm -f "$rebuild_stdout" "$rebuild_stderr" "$rebuild_marker"' EXIT
+
+env \
+    -u TEST_SRCDIR \
+    -u RUNFILES_DIR \
+    -u RUNFILES_MANIFEST_FILE \
+    FAKE_BAZEL_MARKER_FILE="$rebuild_marker" \
+    BAZEL=./fake_bazel.sh \
+    PATH="$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/bin:/bin:/usr/bin" \
+    buildifier --version >"$rebuild_stdout" 2>"$rebuild_stderr" || {
+  echo "buildifier --version failed during rebuild:"
+  cat "$rebuild_stderr"
+  exit 1
+}
+
+# Sanity check: a rebuild actually happened (otherwise this test is vacuous).
+assert_contains "Detected changes in watched files, rebuilding bazel_env..." "$(cat "$rebuild_stderr")"
+
+# The bazel build's stdout must have been redirected to stderr.
+assert_contains "Fake Bazel stdout" "$(cat "$rebuild_stderr")"
+
+# stdout must contain only the wrapped tool's output, not the build logs.
+if grep -qF "Fake Bazel stdout" "$rebuild_stdout"; then
+  echo "Bazel build logs leaked onto the tool's stdout:"
+  cat "$rebuild_stdout"
+  exit 1
+fi
+assert_contains "buildifier version:" "$(cat "$rebuild_stdout")"

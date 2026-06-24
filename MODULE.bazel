@@ -1,6 +1,5 @@
 module(
     name = "bazel_env.bzl",
-    version = "0.0.0",
     bazel_compatibility = [">=7.0.2"],
 )
 

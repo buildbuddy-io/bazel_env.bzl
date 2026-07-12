@@ -50,7 +50,10 @@ jobs:
           USE_BAZEL_VERSION: ${{ matrix.bazel }}
         working-directory: ./examples
         # Build first because the tests rely on convenience symlinks.
-        run: bazelisk build //... && bazelisk test //...
+        run: |
+          bazelisk build //...
+          bazelisk test //...
+          bazelisk test --extra_execution_platforms=@platforms//host //:bazel_env_test
 
       - name: Sanitize Bazel version
         if: always()

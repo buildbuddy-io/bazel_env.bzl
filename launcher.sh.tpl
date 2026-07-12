@@ -100,6 +100,10 @@ fi
 
 rebuild_env=False
 sha256_cmd="${own_path}.runfiles/{{sha256sum_rlocation_path}}"
+sha256_status_option="-s"
+if ! "$sha256_cmd" -c "$sha256_status_option" /dev/null 2>/dev/null; then
+  sha256_status_option="--status"
+fi
 
 if [[ ${#files_to_watch[@]} -gt 0 ]]; then
   lock_file="$watch_base/bazel_env.lock"
@@ -124,7 +128,7 @@ if [[ ${#files_to_watch[@]} -gt 0 ]]; then
   fi
 
   if [[ $matched_count -eq ${#files_to_watch[@]} ]]; then
-    if echo "$matched_lines" | "$sha256_cmd" -c --status - 2>/dev/null; then
+    if echo "$matched_lines" | "$sha256_cmd" -c "$sha256_status_option" - 2>/dev/null; then
       rebuild_env=False
     else
       rebuild_env=True
@@ -149,7 +153,7 @@ if [[ $rebuild_env == True && "${BAZEL_ENV_INTERNAL_EXEC:-False}" != True ]]; th
         ' "$lock_file" 2>/dev/null || true)
 
         if [[ -n "$matched_line" ]]; then
-          if ! echo "$matched_line" | "$sha256_cmd" -c --status - 2>/dev/null; then
+          if ! echo "$matched_line" | "$sha256_cmd" -c "$sha256_status_option" - 2>/dev/null; then
             echo "  - $file (modified)" >&2
           fi
         else

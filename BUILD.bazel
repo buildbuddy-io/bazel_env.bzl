@@ -1,8 +1,16 @@
 load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
+load(":sha256sum_tool.bzl", "sha256sum_tool")
+
+sha256sum_tool(
+    name = "sha256sum_tool",
+)
 
 bzl_library(
     name = "bazel_env",
-    srcs = ["bazel_env.bzl"],
+    srcs = [
+        "bazel_env.bzl",
+        "sha256sum_tool.bzl",
+    ],
     visibility = ["//visibility:public"],
     deps = [
         "@bazel_features//:features",

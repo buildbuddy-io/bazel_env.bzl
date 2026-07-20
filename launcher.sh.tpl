@@ -124,7 +124,7 @@ if [[ ${#files_to_watch[@]} -gt 0 ]]; then
   fi
 
   if [[ $matched_count -eq ${#files_to_watch[@]} ]]; then
-    if echo "$matched_lines" | "$sha256_cmd" -c --status - 2>/dev/null; then
+    if echo "$matched_lines" | "$sha256_cmd" -c - >/dev/null 2>&1; then
       rebuild_env=False
     else
       rebuild_env=True
@@ -149,7 +149,7 @@ if [[ $rebuild_env == True && "${BAZEL_ENV_INTERNAL_EXEC:-False}" != True ]]; th
         ' "$lock_file" 2>/dev/null || true)
 
         if [[ -n "$matched_line" ]]; then
-          if ! echo "$matched_line" | "$sha256_cmd" -c --status - 2>/dev/null; then
+          if ! echo "$matched_line" | "$sha256_cmd" -c - >/dev/null 2>&1; then
             echo "  - $file (modified)" >&2
           fi
         else

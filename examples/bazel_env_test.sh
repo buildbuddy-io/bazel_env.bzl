@@ -134,6 +134,9 @@ diff <(expected_output "$BAZEL_REPO_NAME_SEPARATOR" "$TOOLCHAIN_TYPES_SUPPORTED"
 
 #### Tools ####
 
+# Ensure repeated test configurations begin with the same auto-rebuild state.
+rm -f "$build_workspace_directory/bazel_env.lock"
+
 # First call to any bazel_env tool will trigger rebuild
 assert_cmd_output "bazel-cc --version" "Detected changes in watched files, rebuilding bazel_env..."
 assert_cmd_output "bazel-cc --version" "@(*gcc*|*clang*)"

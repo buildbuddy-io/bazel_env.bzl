@@ -1,5 +1,6 @@
 load("@bazel_features//:features.bzl", "bazel_features")
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load(":sha256sum_tool.bzl", _Sha256sumInfo = "Sha256sumInfo")
 
 def _rlocation_path(ctx, file):
     # type: (ctx, File) -> string
@@ -247,8 +248,6 @@ def _shell_quote(s):
     # type: (string) -> string
     return "'" + s.replace("'", "'\\''") + "'"
 
-_SHA256SUM_TOOLCHAIN_TYPE = "@rules_coreutils//coreutils/toolchain/sha256sum:type"
-
 def _tool_impl(ctx):
     # type: (ctx) -> list[Provider]
     name = ctx.label.name.rpartition("/")[-1]
@@ -286,9 +285,9 @@ def _tool_impl(ctx):
         if _BinaryArgsInfo in target:
             extra_args = target[_BinaryArgsInfo].args
 
-    sha256sum = ctx.toolchains[_SHA256SUM_TOOLCHAIN_TYPE]
+    sha256sum = ctx.attr._sha256sum[0][_Sha256sumInfo]
 
-    runfiles = runfiles.merge(sha256sum.default.default_runfiles)
+    runfiles = runfiles.merge(sha256sum.default_runfiles)
 
     ctx.actions.expand_template(
         template = ctx.file._launcher,
@@ -297,7 +296,7 @@ def _tool_impl(ctx):
         substitutions = {
             "{{bazel_env_label}}": str(ctx.label).removeprefix("@@").removesuffix("/bin/" + name),
             "{{rlocation_path}}": rlocation_path,
-            "{{sha256sum_rlocation_path}}": _rlocation_path(ctx, sha256sum.run.executable),
+            "{{sha256sum_rlocation_path}}": _rlocation_path(ctx, sha256sum.executable),
             "{{extra_env}}": "\n".join([
                 "export {}={}".format(k, repr(v))
                 for k, v in extra_env.items()
@@ -338,9 +337,17 @@ _tool = rule(
             default = ":launcher.sh.tpl",
             executable = True,
         ),
+        # The launcher runs sha256sum on the host machine, so its toolchain has to be resolved
+        # with the host platform as the highest-precedence execution platform. _tool itself can't
+        # force this via its own configuration without adding an ST hash to the "bazel_env-opt"
+        # output directory, so it instead depends on the resolving rule via the _flip_output_dir
+        # transition, which restores the host platform's precedence.
+        "_sha256sum": attr.label(
+            cfg = _flip_output_dir,
+            default = ":sha256sum_tool",
+        ),
     },
     executable = True,
-    toolchains = [_SHA256SUM_TOOLCHAIN_TYPE],
 )
 
 def _toolchain_impl(ctx):

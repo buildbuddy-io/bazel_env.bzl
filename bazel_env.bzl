@@ -248,6 +248,8 @@ def _shell_quote(s):
     # type: (string) -> string
     return "'" + s.replace("'", "'\\''") + "'"
 
+_CHMOD_TOOLCHAIN_TYPE = Label("@rules_coreutils//coreutils/toolchain/chmod:type")
+
 def _tool_impl(ctx):
     # type: (ctx) -> list[Provider]
     name = ctx.label.name.rpartition("/")[-1]
@@ -294,7 +296,7 @@ def _tool_impl(ctx):
         output = out,
         is_executable = True,
         substitutions = {
-            "{{bazel_env_label}}": str(ctx.label).removeprefix("@@").removesuffix("/bin/" + name),
+            "{{bazel_env_label}}": str(ctx.label).removeprefix("@@").removesuffix("/tools/" + name),
             "{{rlocation_path}}": rlocation_path,
             "{{sha256sum_rlocation_path}}": _rlocation_path(ctx, sha256sum.executable),
             "{{extra_env}}": "\n".join([
@@ -402,16 +404,46 @@ _toolchain = rule(
     },
 )
 
+# Populates the PATH-facing bin directory (a tree artifact) with a trampoline script per tool
+# plus the marker script used by the status script to detect whether the directory is on PATH.
+# The trampolines exec the real launchers, which live under <name>/tools/ as individual
+# artifacts: launchers cannot live in the tree artifact themselves as Bazel materializes their
+# runfiles trees next to them, which isn't possible within a tree artifact.
+# $0 is always a filesystem path (absolute, or relative to $PWD), never a bare name, even when
+# the trampoline is found via PATH lookup: a spawner has to resolve a bare name to a path before
+# it can execve() the file, and for a #! script the kernel passes that resolved path to the
+# interpreter as the script operand, replacing the caller's argv[0].
+# The single `%` strips the shortest matching suffix, i.e., the final /bin/<tool> segment, not
+# the /bin/ segment of the bazel-out bin directory.
+_ASSEMBLE_BIN_DIR_COMMAND = """\
+set -euo pipefail
+chmod="$1"
+out="$2"
+marker="$3"
+shift 3
+marker_content='#!/usr/bin/env bash
+exit 0'
+printf '%s\\n' "$marker_content" > "$out/$marker"
+trampoline='#!/usr/bin/env bash
+case "$0" in
+  /*) own_path="$0" ;;
+  *) own_path="$PWD/$0" ;;
+esac
+exec "${own_path%/bin/*}/tools/@TOOL@" "$@"'
+for tool in "$@"; do
+  printf '%s\\n' "${trampoline//@TOOL@/$tool}" > "$out/$tool"
+done
+"$chmod" +x "$out"/*
+"""
+
 def _bazel_env_rule_impl(ctx):
     # type: (ctx) -> list[Provider]
     implicit_out = ctx.actions.declare_file(ctx.label.name + "_all_tools")
 
-    unique_name_tool = ctx.attr.unique_name_tool[DefaultInfo].files.to_list()[0]
-
     # It is not necessary to stage the toolchain files (which are in runfiles) as inputs as their
     # repos have already been fetched before the toolchain rules were analyzed.
     transitive_inputs = [toolchain[DefaultInfo].files for toolchain in ctx.attr.toolchain_targets]
-    direct_inputs = [unique_name_tool, ctx.file.all_tools_file] + ctx.files.tool_dirs + ctx.files.tool_files
+    direct_inputs = ctx.files.tool_dirs + ctx.files.tool_files
     tools = [tool[DefaultInfo].files_to_run for tool in ctx.attr.tool_targets]
     ctx.actions.run_shell(
         outputs = [implicit_out],
@@ -435,6 +467,26 @@ def _bazel_env_rule_impl(ctx):
     tool_infos = [tool[_ToolInfo] for tool in ctx.attr.tool_targets]
     tool_name_pad = max([len(tool_info.name) for tool_info in tool_infos] + [0])
 
+    # The bin directory is a single tree artifact so that Bazel replaces it wholesale and a
+    # build never leaves trampolines of removed tools behind on PATH. The action intentionally
+    # only depends on the tool *names*, not the launchers, so it only reruns when the tool set
+    # changes.
+    bin_dir = ctx.actions.declare_directory(ctx.label.name + "/bin")
+    chmod = ctx.toolchains[_CHMOD_TOOLCHAIN_TYPE]
+    assemble_args = ctx.actions.args()
+    assemble_args.add(chmod.run.executable)
+    assemble_args.add(bin_dir.path)
+    assemble_args.add(ctx.attr.unique_marker_name)
+    assemble_args.add_all([tool_info.name for tool_info in tool_infos])
+    ctx.actions.run_shell(
+        outputs = [bin_dir],
+        tools = [chmod.run],
+        command = _ASSEMBLE_BIN_DIR_COMMAND,
+        arguments = [assemble_args],
+        toolchain = _CHMOD_TOOLCHAIN_TYPE,
+        mnemonic = "BazelEnvBinDir",
+    )
+
     toolchain_infos = [struct(
         name = toolchain.label.name.rpartition("/")[-1],
         path = toolchain[DefaultInfo].files.to_list()[0].path,
@@ -442,12 +494,6 @@ def _bazel_env_rule_impl(ctx):
     toolchain_name_pad = max([len(toolchain_info.name) for toolchain_info in toolchain_infos] + [0])
 
     status_script = ctx.actions.declare_file(ctx.label.name + ".sh")
-    tool_regex = "\\|".join(
-        [tool_info.name for tool_info in tool_infos] +
-        [unique_name_tool.basename, ctx.file.all_tools_file.basename] +
-        [dir.basename for dir in ctx.files.tool_dirs] +
-        [file.basename for file in ctx.files.tool_files],
-    )
     ctx.actions.expand_template(
         template = ctx.file._status,
         output = status_script,
@@ -457,10 +503,9 @@ def _bazel_env_rule_impl(ctx):
             # We assume that the target is in the main repo and want the label to look like this:
             # //:bazel_env
             "{{label}}": str(ctx.label).removeprefix("@@"),
-            "{{bin_dir}}": unique_name_tool.dirname,
-            "{{unique_name_tool}}": unique_name_tool.basename,
+            "{{bin_dir}}": bin_dir.path,
+            "{{unique_name_tool}}": ctx.attr.unique_marker_name,
             "{{has_tools}}": str(bool(tool_infos)),
-            "{{tools_regex}}": tool_regex,
             "{{tools}}": "\n".join(
                 [
                     "  * {}:{} {}".format(tool_info.name, (tool_name_pad - len(tool_info.name)) * " ", tool_info.raw_tool)
@@ -480,7 +525,7 @@ def _bazel_env_rule_impl(ctx):
     return [
         DefaultInfo(
             executable = status_script,
-            files = depset([implicit_out]),
+            files = depset([implicit_out, bin_dir]),
         ),
     ]
 
@@ -488,10 +533,9 @@ _bazel_env_rule = rule(
     cfg = _flip_output_dir,
     implementation = _bazel_env_rule_impl,
     attrs = {
-        "all_tools_file": attr.label(allow_single_file = True),
         "tool_dirs": attr.label_list(allow_files = True),
         "tool_files": attr.label_list(allow_files = True),
-        "unique_name_tool": attr.label(),
+        "unique_marker_name": attr.string(),
         "tool_targets": attr.label_list(
             providers = [_ToolInfo],
         ),
@@ -506,12 +550,13 @@ _bazel_env_rule = rule(
         ),
     },
     executable = True,
+    toolchains = [_CHMOD_TOOLCHAIN_TYPE],
 )
 
 _FORBIDDEN_TOOL_NAMES = ["direnv", "bazel", "bazelisk"]
 
 def _write_watch_dirs(name, tool_name, dirs):
-    watch_file = name + "/bin/_{}_watch_dirs".format(tool_name)
+    watch_file = name + "/tools/_{}_watch_dirs".format(tool_name)
     write_file(
         name = watch_file,
         out = watch_file + ".txt",
@@ -523,7 +568,7 @@ def _write_watch_dirs(name, tool_name, dirs):
     return watch_file
 
 def _write_watch_files(name, tool_name, files):
-    watch_file = name + "/bin/_{}_watch_files".format(tool_name)
+    watch_file = name + "/tools/_{}_watch_files".format(tool_name)
     write_file(
         name = watch_file,
         out = watch_file + ".txt",
@@ -544,9 +589,11 @@ def bazel_env(*, name, tools = {}, toolchains = {}, watch_dirs = {}, watch_files
     * tools are staged in `bazel-out/bazel_env-opt/bin/path/to/pkg/name/bin`
     * toolchains are staged in `bazel-out/bazel_env-opt/bin/path/to/pkg/name/toolchains`
 
+    The `bin` directory is regenerated as a whole on each build, so tools removed from `tools`
+    also disappear from `PATH` with the next build.
+
     Run this target with `bazel run` for instructions on how to make the tools available on `PATH`
-    using [`direnv`](https://direnv.net/). This also prints a list of all tools and toolchains as
-    well as cleans up stale tools.
+    using [`direnv`](https://direnv.net/). This also prints a list of all tools and toolchains.
 
     Args:
         name: The name of the rule.
@@ -615,25 +662,6 @@ def bazel_env(*, name, tools = {}, toolchains = {}, watch_dirs = {}, watch_files
         native.package_name(),
         name,
     ).replace("/", "-")
-    unique_name_tool = name + "/bin/" + unique_suffix
-    write_file(
-        name = unique_name_tool,
-        out = unique_name_tool + ".sh",
-        content = ["#!/usr/bin/env bash", "exit 0"],
-        is_executable = True,
-        visibility = ["//visibility:private"],
-        tags = ["manual"],
-    )
-    all_tools_file = name + "/bin/_all_tools"
-    write_file(
-        name = all_tools_file,
-        out = all_tools_file + ".txt",
-        # List all tools in a format that is easy to grep.
-        content = [" " + " ".join(tools.keys()) + " "],
-        is_executable = False,
-        visibility = ["//visibility:private"],
-        tags = ["manual"],
-    )
 
     for toolchain_name, toolchain in toolchains.items():
         if not toolchain_name:
@@ -705,6 +733,8 @@ def bazel_env(*, name, tools = {}, toolchains = {}, watch_dirs = {}, watch_files
     for tool_name, tool in tools.items():
         if not tool_name:
             fail("empty tool names are not allowed")
+        if "/" in tool_name:
+            fail("tool names must not contain '/', got '{}'".format(tool_name))
         if tool_name in _FORBIDDEN_TOOL_NAMES:
             fail("tool name '{}' is forbidden".format(tool_name))
         tool_kwargs = {}
@@ -716,7 +746,7 @@ def bazel_env(*, name, tools = {}, toolchains = {}, watch_dirs = {}, watch_files
         else:
             tool_kwargs["target"] = tool
 
-        tool_target_name = name + "/bin/" + tool_name
+        tool_target_name = name + "/tools/" + tool_name
         tool_targets.append(tool_target_name)
         _tool(
             name = tool_target_name,
@@ -733,10 +763,9 @@ def bazel_env(*, name, tools = {}, toolchains = {}, watch_dirs = {}, watch_files
 
     _bazel_env_rule(
         name = name,
-        all_tools_file = all_tools_file,
         tool_dirs = tool_dirs,
         tool_files = tool_files,
-        unique_name_tool = unique_name_tool,
+        unique_marker_name = unique_suffix,
         tool_targets = tool_targets,
         toolchain_targets = toolchain_targets,
         **kwargs

@@ -144,7 +144,8 @@ The [example](examples/) demonstrates this use of `rules_multitool` to fetch too
 ## Usage
 
 Build the `bazel_env` target to keep the tools and toolchains up-to-date with the Bazel build.
-The target can also be executed with `bazel run` to print the list of tools and toolchains as well as clean up removed tools.
+Tools removed from the `tools` attribute also disappear from `PATH` with the next build.
+The target can also be executed with `bazel run` to print the list of tools and toolchains.
 
 > [!IMPORTANT]
 > Shells such as `bash` and `zsh` will not automatically pick up changes to directories in `PATH`.

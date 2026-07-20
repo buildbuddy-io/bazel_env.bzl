@@ -20,9 +20,11 @@ platform-independent paths:
 * tools are staged in `bazel-out/bazel_env-opt/bin/path/to/pkg/name/bin`
 * toolchains are staged in `bazel-out/bazel_env-opt/bin/path/to/pkg/name/toolchains`
 
+The `bin` directory is regenerated as a whole on each build, so tools removed from `tools`
+also disappear from `PATH` with the next build.
+
 Run this target with `bazel run` for instructions on how to make the tools available on `PATH`
-using [`direnv`](https://direnv.net/). This also prints a list of all tools and toolchains as
-well as cleans up stale tools.
+using [`direnv`](https://direnv.net/). This also prints a list of all tools and toolchains.
 
 
 **PARAMETERS**

@@ -48,10 +48,6 @@ case "${BASH_SOURCE[0]}" in
 esac
 own_dir="$(dirname "$own_path")"
 own_name="$(basename "$own_path")"
-if ! grep -q -F "$own_name" "$own_dir/_all_tools.txt"; then
-  echo "ERROR: $own_name has been removed from bazel_env, run 'bazel run {{bazel_env_label}}' to remove it from PATH." >&2
-  exit 1
-fi
 
 workspace_path="$(_bazel__get_workspace_path)"
 source_workspace_path="$(_bazel__get_source_workspace_path "$own_path")"

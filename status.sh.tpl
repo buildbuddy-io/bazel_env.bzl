@@ -77,22 +77,6 @@ EOF
     exit 1
 fi
 
-cleaned=0
-for f in '{{bin_dir}}'/*;
-do
-  if basename "$f" | grep -q -v '{{tools_regex}}'; then
-    rm -rf ./"$f"
-    cleaned=1
-  fi
-done
-
-if [[ $cleaned == 1 ]]; then
-cat << 'EOF'
-✅ Cleaned up stale tools
-EOF
-fi
-
-
 cat << 'EOF'
 
 Tools available in PATH:

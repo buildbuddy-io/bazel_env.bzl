@@ -291,11 +291,22 @@ def _tool_impl(ctx):
 
     runfiles = runfiles.merge(sha256sum.default_runfiles)
 
+    # Path of the helper action output of the bazel_env target (see
+    # _bazel_env_rule_impl) relative to the directory containing the launcher.
+    # It is built from ".." segments instead of stripping path suffixes so
+    # that it also resolves correctly if the launcher is invoked through a
+    # symlink to the bin directory.
+    bazel_env_name = ctx.label.name.removesuffix("/tools/" + name)
+    all_tools_path = "/".join(
+        [".."] * (2 + bazel_env_name.count("/")) + [bazel_env_name + "_all_tools"],
+    )
+
     ctx.actions.expand_template(
         template = ctx.file._launcher,
         output = out,
         is_executable = True,
         substitutions = {
+            "{{all_tools_path}}": all_tools_path,
             "{{bazel_env_label}}": str(ctx.label).removeprefix("@@").removesuffix("/tools/" + name),
             "{{rlocation_path}}": rlocation_path,
             "{{sha256sum_rlocation_path}}": _rlocation_path(ctx, sha256sum.executable),
@@ -438,6 +449,10 @@ done
 
 def _bazel_env_rule_impl(ctx):
     # type: (ctx) -> list[Provider]
+    # The launcher deletes this output before an auto-rebuild to force the
+    # action below to re-execute, which makes Bazel re-verify the runfiles
+    # trees of all tools. Keep the name in sync with the {{all_tools_path}}
+    # substitution in _tool_impl.
     implicit_out = ctx.actions.declare_file(ctx.label.name + "_all_tools")
 
     # It is not necessary to stage the toolchain files (which are in runfiles) as inputs as their

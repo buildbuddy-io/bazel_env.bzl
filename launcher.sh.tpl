@@ -154,6 +154,13 @@ if [[ $rebuild_env == True && "${BAZEL_ENV_INTERNAL_EXEC:-False}" != True ]]; th
       fi
     done
   fi
+  # The runfiles trees of the tools are only (re-)created when the bazel_env
+  # target's helper action actually executes, which it doesn't if the build is
+  # an incremental action cache hit (its no-cache tag only disables the remote
+  # and disk caches). Delete its output so that the build below re-executes it
+  # and Bazel re-verifies and, if necessary, repairs the runfiles trees of all
+  # tools, e.g. after a cache cleaner deleted files from the output base.
+  rm -f "${own_dir}/{{all_tools_path}}"
   # Run bazel from the source workspace to ensure it can find the WORKSPACE/MODULE file.
   # Redirect stdout to stderr so build logs don't pollute stdout and break piping.
   (cd "$watch_base" && "${BAZEL:-bazel}" build {{bazel_env_label}} >&2)

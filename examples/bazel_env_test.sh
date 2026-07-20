@@ -263,3 +263,52 @@ if grep -qF "Fake Bazel stdout" "$rebuild_stdout"; then
   exit 1
 fi
 assert_contains "buildifier version:" "$(cat "$rebuild_stdout")"
+
+#### Auto-rebuild re-materializes runfiles trees ####
+
+# The runfiles trees of the tools are only (re-)created when the bazel_env
+# target's helper action actually executes. On a fully cached build, Bazel
+# skips the action and never re-verifies the trees, so externally corrupted
+# runfiles (e.g. after a cache cleaner ran over the output base) would stay
+# broken forever. The launcher must therefore delete the helper action's
+# output before invoking bazel so that the action re-executes and Bazel
+# itself repairs the runfiles trees of all tools.
+
+all_tools_out="$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env_all_tools"
+# The rebuilds triggered earlier in this test already deleted the helper
+# action's output and the fake bazel doesn't recreate it. Recreate it here to
+# verify that the launcher deletes it before invoking bazel.
+rm -f "$all_tools_out"
+: > "$all_tools_out"
+
+# Remove the lock file to force a rebuild on the next tool invocation.
+rm -f "$build_workspace_directory/bazel_env.lock"
+
+observation_file=$(mktemp)
+repair_marker=$(mktemp)
+trap 'rm -f "$rebuild_stdout" "$rebuild_stderr" "$rebuild_marker" "$observation_file" "$repair_marker"' EXIT
+
+repair_output=$(env \
+    -u TEST_SRCDIR \
+    -u RUNFILES_DIR \
+    -u RUNFILES_MANIFEST_FILE \
+    FAKE_BAZEL_MARKER_FILE="$repair_marker" \
+    FAKE_BAZEL_OBSERVED_FILE="$all_tools_out" \
+    FAKE_BAZEL_OBSERVATION_FILE="$observation_file" \
+    BAZEL=./fake_bazel.sh \
+    PATH="$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/bin:/bin:/usr/bin" \
+    buildifier --version 2>&1) || {
+  echo "buildifier --version failed during rebuild:"
+  echo "$repair_output"
+  exit 1
+}
+
+# Sanity check: a rebuild actually happened (otherwise this test is vacuous).
+assert_contains "Detected changes in watched files, rebuilding bazel_env..." "$repair_output"
+
+# The launcher must have deleted the helper action's output before invoking
+# bazel so that the action re-executes even on an otherwise fully cached build.
+if [[ "$(cat "$observation_file")" != "absent" ]]; then
+  echo "Expected the launcher to delete $all_tools_out before invoking bazel, but it still existed"
+  exit 1
+fi

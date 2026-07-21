@@ -509,18 +509,21 @@ def _bazel_env_rule_impl(ctx):
     toolchain_name_pad = max([len(toolchain_info.name) for toolchain_info in toolchain_infos] + [0])
 
     status_script = ctx.actions.declare_file(ctx.label.name + ".sh")
+
+    symlink_name = ".{}".format(ctx.label.name)
+
     ctx.actions.expand_template(
         template = ctx.file._status,
         output = status_script,
         is_executable = True,
         substitutions = {
+            "{{package_path}}": ctx.label.package,
             "{{name}}": ctx.label.name,
-            # We assume that the target is in the main repo and want the label to look like this:
-            # //:bazel_env
             "{{label}}": str(ctx.label).removeprefix("@@"),
             "{{bin_dir}}": bin_dir.path,
             "{{unique_name_tool}}": ctx.attr.unique_marker_name,
             "{{has_tools}}": str(bool(tool_infos)),
+            "{{symlink_name}}": symlink_name,
             "{{tools}}": "\n".join(
                 [
                     "  * {}:{} {}".format(tool_info.name, (tool_name_pad - len(tool_info.name)) * " ", tool_info.raw_tool)
@@ -530,7 +533,7 @@ def _bazel_env_rule_impl(ctx):
             "{{has_toolchains}}": str(bool(ctx.attr.toolchain_targets)),
             "{{toolchains}}": "\n".join(
                 [
-                    "  * {}:{} {}".format(toolchain_info.name, (toolchain_name_pad - len(toolchain_info.name)) * " ", toolchain_info.path)
+                    "  * {}:{} {}/toolchains/{}".format(toolchain_info.name, (toolchain_name_pad - len(toolchain_info.name)) * " ", symlink_name, toolchain_info.name)
                     for toolchain_info in toolchain_infos
                 ],
             ),

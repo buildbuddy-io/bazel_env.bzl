@@ -149,6 +149,8 @@ Tools available in PATH:
   * ibazel:      @@rules_multitool${sep}${sep}multitool${sep}multitool//tools/ibazel:ibazel
   * terraform:   @@rules_multitool${sep}${sep}multitool${sep}multitool//tools/terraform:terraform
 
+ℹ️  The bin directory is also reachable at bazel-out/bazel_env-opt/bin/bazel_env/bin relative to the workspace root.
+
 Toolchains available at stable relative paths:
   * cc_toolchain:      .bazel_env/toolchains/cc_toolchain
   * jdk:               .bazel_env/toolchains/jdk
@@ -157,7 +159,6 @@ Toolchains available at stable relative paths:
   * rust:              .bazel_env/toolchains/rust
   * rules_python_docs: .bazel_env/toolchains/rules_python_docs
 ${toolchain_type_toolchains}
-⚠️  Remember previous bazel-out/bazel_env-opt/bin/bazel_env/bin dynamic path continues to work.
 ⚠️  Remember to run 'hash -r' in bash to update the locations of binaries on the PATH.
 "
 }

@@ -116,6 +116,13 @@ Tools available in PATH:
 {{tools}}
 
 EOF
+
+# The bazel-out path only exists if convenience symlinks are enabled via
+# --symlink_prefix.
+if [[ -d "$BUILD_WORKSPACE_DIRECTORY/{{bin_dir}}" ]]; then
+  echo "ℹ️  The bin directory is also reachable at {{bin_dir}} relative to the workspace root."
+  echo ""
+fi
 fi
 
 if [[ {{has_toolchains}} == True ]]; then
@@ -123,7 +130,6 @@ cat << 'EOF'
 Toolchains available at stable relative paths:
 {{toolchains}}
 
-⚠️  Remember previous {{bin_dir}} dynamic path continues to work.
 EOF
 fi
 

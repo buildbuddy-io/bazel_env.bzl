@@ -17,30 +17,18 @@ else
   subcommand="status"
 fi
 
-if [[ "$subcommand" == "print-path" ]]; then
-  echo "$BUILD_WORKSPACE_DIRECTORY/{{bin_dir}}"
-  exit 0
-fi
-if [[ "$subcommand" != "status" ]]; then
+if [[ "$subcommand" != "status" && "$subcommand" != "print-path" ]]; then
   fail_with_usage
 fi
 
+# Resolve the physical location of the bin directory relative to this script
+# and expose it through a symlink in the package of the bazel_env target. The
+# symlink provides a stable path that works with any --symlink_prefix setting,
+# including one that suppresses the bazel-* convenience symlinks.
 TOOLS_BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/{{name}}/bin" && pwd -P)"
 BAZEL_ENV_ROOT="$(dirname "$TOOLS_BIN_DIR")"
 
 cd "$BUILD_WORKSPACE_DIRECTORY/{{package_path}}"
-
-if [[ -z "{{package_path}}" ]]; then
-  DISPLAY_DIR="the workspace root"
-else
-  DISPLAY_DIR="{{package_path}}/"
-fi
-
-cat << 'EOF'
-
-====== {{name}} ======
-
-EOF
 
 SYMLINK_NAME="{{symlink_name}}"
 
@@ -53,6 +41,22 @@ fi
 
 ln -s "$BAZEL_ENV_ROOT" "$SYMLINK_NAME"
 
+if [[ "$subcommand" == "print-path" ]]; then
+  echo "$PWD/$SYMLINK_NAME/bin"
+  exit 0
+fi
+
+if [[ -z "{{package_path}}" ]]; then
+  DISPLAY_DIR="the workspace root"
+else
+  DISPLAY_DIR="{{package_path}}/"
+fi
+
+cat << 'EOF'
+
+====== {{name}} ======
+
+EOF
 
 if [[ {{has_tools}} == True ]]; then
 

@@ -60,11 +60,16 @@ BUILD_WORKSPACE_DIRECTORY="$build_workspace_directory" \
     echo "$print_path_out"
     exit 1
   }
-if [[ "$print_path_out" != "$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/bin" ]]; then
+if [[ "$print_path_out" != "$build_workspace_directory/.bazel_env/bin" ]]; then
   echo "print-path output did not match the expected path:"
   echo "  $print_path_out"
   echo "Expected:"
-  echo "  $build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/bin"
+  echo "  $build_workspace_directory/.bazel_env/bin"
+  exit 1
+fi
+# print-path creates the symlink itself, so the printed path always exists.
+if [[ ! -d "$print_path_out" ]]; then
+  echo "print-path output is not a directory: $print_path_out"
   exit 1
 fi
 

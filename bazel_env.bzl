@@ -521,6 +521,10 @@ def _bazel_env_rule_impl(ctx):
 
     symlink_name = ".{}".format(ctx.label.name)
 
+    # Path of the symlink relative to the workspace root, for use in the
+    # workspace-root .envrc file and in displayed paths.
+    symlink_path = symlink_name if not ctx.label.package else ctx.label.package + "/" + symlink_name
+
     ctx.actions.expand_template(
         template = ctx.file._status,
         output = status_script,
@@ -533,6 +537,7 @@ def _bazel_env_rule_impl(ctx):
             "{{unique_name_tool}}": ctx.attr.unique_marker_name,
             "{{has_tools}}": str(bool(tool_infos)),
             "{{symlink_name}}": symlink_name,
+            "{{symlink_path}}": symlink_path,
             "{{tools}}": "\n".join(
                 [
                     "  * {}:{} {}".format(tool_info.name, (tool_name_pad - len(tool_info.name)) * " ", tool_info.raw_tool)
@@ -542,7 +547,7 @@ def _bazel_env_rule_impl(ctx):
             "{{has_toolchains}}": str(bool(ctx.attr.toolchain_targets)),
             "{{toolchains}}": "\n".join(
                 [
-                    "  * {}:{} {}/toolchains/{}".format(toolchain_info.name, (toolchain_name_pad - len(toolchain_info.name)) * " ", symlink_name, toolchain_info.name)
+                    "  * {}:{} {}/toolchains/{}".format(toolchain_info.name, (toolchain_name_pad - len(toolchain_info.name)) * " ", symlink_path, toolchain_info.name)
                     for toolchain_info in toolchain_infos
                 ],
             ),

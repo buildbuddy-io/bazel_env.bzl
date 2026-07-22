@@ -49,12 +49,6 @@ if [[ "$subcommand" == "print-path" ]]; then
   exit 0
 fi
 
-if [[ -z "{{package_path}}" ]]; then
-  DISPLAY_DIR="the workspace root"
-else
-  DISPLAY_DIR="{{package_path}}/"
-fi
-
 cat << 'EOF'
 
 ====== {{name}} ======
@@ -70,7 +64,7 @@ else
 fi
 
 if type {{unique_name_tool}} >/dev/null 2>/dev/null; then
-    echo "✅ direnv added ./$SYMLINK_NAME/bin to PATH"
+    echo "✅ direnv added ./{{symlink_path}}/bin to PATH"
 else
     echo "❌ {{name}}'s bin directory is not in PATH. Please follow these steps:"
 
@@ -82,19 +76,22 @@ else
       step_num=$((step_num + 1))
     fi
 
-    if ! grep -qE '[[:<:]]bazel_env[[:>:]]' .envrc 2>/dev/null; then
+    # The .envrc file lives in the workspace root so that direnv activates the
+    # environment in the entire workspace; the paths in it are relative to the
+    # workspace root and thus include the package path.
+    if ! grep -qE '[[:<:]]bazel_env[[:>:]]' "$BUILD_WORKSPACE_DIRECTORY/.envrc" 2>/dev/null; then
       echo ""
-      if [[ -f .envrc ]]; then
-        echo "$step_num. Add the following content to your existing .envrc file in $DISPLAY_DIR:"
+      if [[ -f "$BUILD_WORKSPACE_DIRECTORY/.envrc" ]]; then
+        echo "$step_num. Add the following content to your existing .envrc file:"
       else
-        echo "$step_num. Create a .envrc file in $DISPLAY_DIR with this content:"
+        echo "$step_num. Create a .envrc file next to your MODULE.bazel file with this content:"
       fi
-      cat << EOF
+      cat << 'EOF'
 
-watch_file $SYMLINK_NAME/bin
-PATH_add $SYMLINK_NAME/bin
-if [[ ! -d $SYMLINK_NAME/bin ]]; then
-  log_error "ERROR[bazel_env.bzl]: Run 'bazel run {{label}}' to regenerate $SYMLINK_NAME/bin"
+watch_file {{symlink_path}}/bin
+PATH_add {{symlink_path}}/bin
+if [[ ! -d {{symlink_path}}/bin ]]; then
+  log_error "ERROR[bazel_env.bzl]: Run 'bazel run {{label}}' to regenerate {{symlink_path}}/bin"
 fi
 EOF
       step_num=$((step_num + 1))

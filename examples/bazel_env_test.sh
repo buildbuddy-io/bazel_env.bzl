@@ -152,6 +152,30 @@ ${toolchain_type_toolchains}
 
 diff <(expected_output "$BAZEL_REPO_NAME_SEPARATOR" "$TOOLCHAIN_TYPES_SUPPORTED") <(echo "$status_out") || exit 1
 
+#### Non-root package instructions ####
+
+# The setup instructions anchor at the workspace-root .envrc file and prefix
+# all paths with the package of the bazel_env target. An empty temporary
+# workspace serves as BUILD_WORKSPACE_DIRECTORY so that the check for an
+# existing .envrc file does not suppress the instructions.
+nested_ws=$(mktemp -d 2>/dev/null || mktemp -d -t 'nested_ws')
+trap 'rm -rf "$nested_ws"' EXIT
+mkdir -p "$nested_ws/nested"
+if nested_out=$(PATH="$tmpdir:/bin:/usr/bin" \
+BUILD_WORKSPACE_DIRECTORY="$nested_ws" \
+  ./nested/nested_env.sh 2>&1); then
+  echo "Expected the nested status script to fail without the marker tool on PATH:"
+  echo "$nested_out"
+  exit 1
+fi
+assert_contains "Create a .envrc file next to your MODULE.bazel file" "$nested_out"
+assert_contains "watch_file nested/.nested_env/bin" "$nested_out"
+assert_contains "PATH_add nested/.nested_env/bin" "$nested_out"
+if [[ ! -L "$nested_ws/nested/.nested_env" ]]; then
+  echo "Error: .nested_env symlink was not created in the nested package directory"
+  exit 1
+fi
+
 #### Tools ####
 
 # Ensure repeated test configurations begin with the same auto-rebuild state.

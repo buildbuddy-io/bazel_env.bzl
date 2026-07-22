@@ -176,10 +176,34 @@ if [[ ! -L "$nested_ws/nested/.nested_env" ]]; then
   exit 1
 fi
 
+#### .envrc consistency ####
+
+# The checked-in .envrc file matches the snippet the status script emits for
+# the root-package target, so the two cannot drift apart. An empty temporary
+# workspace serves as BUILD_WORKSPACE_DIRECTORY so that the instructions are
+# printed.
+envrc_ws=$(mktemp -d 2>/dev/null || mktemp -d -t 'envrc_ws')
+trap 'rm -rf "$envrc_ws"' EXIT
+if envrc_instructions=$(PATH="$tmpdir:/bin:/usr/bin" \
+BUILD_WORKSPACE_DIRECTORY="$envrc_ws" \
+  ./bazel_env.sh 2>&1); then
+  echo "Expected the status script to fail without the marker tool on PATH:"
+  echo "$envrc_instructions"
+  exit 1
+fi
+while IFS= read -r envrc_line; do
+  [[ -z "$envrc_line" ]] && continue
+  assert_contains "$envrc_line" "$envrc_instructions"
+done < "$build_workspace_directory/.envrc"
+
 #### Tools ####
 
 # Ensure repeated test configurations begin with the same auto-rebuild state.
 rm -f "$build_workspace_directory/bazel_env.lock"
+
+# The assertions in this section invoke tools through the bazel-out path style
+# of the bin directory; together with the "Tools via the package-scoped
+# symlink" section, both supported path styles are exercised.
 
 # First call to any bazel_env tool will trigger rebuild
 assert_cmd_output "bazel-cc --version" "Detected changes in watched files, rebuilding bazel_env..."
@@ -210,7 +234,8 @@ assert_cmd_output "terraform --version" "Terraform v1.9.3"
 #### Tools via the package-scoped symlink ####
 
 # The launchers are also reachable through the package-scoped symlink and
-# behave identically to the bazel-out path style.
+# behave identically to the bazel-out path style. Together with the section
+# above, both supported path styles are exercised.
 BAZEL_ENV_BIN_DIR="$build_workspace_directory/.bazel_env/bin"
 assert_cmd_output "buildifier --version" "buildifier version: 7.3.1 "
 assert_cmd_output "loc_tool" "found: *location_test_data*"

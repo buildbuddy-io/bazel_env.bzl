@@ -58,14 +58,18 @@ $ bazel run //:bazel_env
 
 2. Add the following snippet to a .envrc file next to your MODULE.bazel file:
 
-watch_file bazel-out/bazel_env-opt/bin/bazel_env/bin
-PATH_add bazel-out/bazel_env-opt/bin/bazel_env/bin
-if [[ ! -d bazel-out/bazel_env-opt/bin/bazel_env/bin ]]; then
-  log_error "ERROR[bazel_env.bzl]: Run 'bazel run //:bazel_env' to regenerate bazel-out/bazel_env-opt/bin/bazel_env/bin"
+watch_file .bazel_env/bin
+PATH_add .bazel_env/bin
+if [[ ! -d .bazel_env/bin ]]; then
+  log_error "ERROR[bazel_env.bzl]: Run 'bazel run //:bazel_env' to regenerate .bazel_env/bin"
 fi
 
-3. Allowlist the file with 'direnv allow .envrc'.
+3. Run 'direnv allow' to allowlist your .envrc file.
 ```
+
+`bazel run //:bazel_env` maintains a symlink named after the target with a leading dot (here: `.bazel_env`) in the target's package that points into Bazel's output tree.
+All paths in the instructions go through this symlink, so they work with any `--symlink_prefix` setting, including `--symlink_prefix=/`, which suppresses the `bazel-*` convenience symlinks in the workspace root.
+The symlink should be added to `.gitignore`.
 
 Multiple `bazel_env` targets can be added per project.
 Note that each target will eagerly fetch and build all tools and toolchains when built, so consider splitting them up into workflow-specific targets if necessary.
@@ -83,15 +87,7 @@ $ bazel run //:bazel_env
 
 1. Enable direnv's shell hook as described in https://direnv.net/docs/hook.html.
 
-2. Add the following snippet to a .envrc file next to your MODULE.bazel file:
-
-watch_file bazel-out/bazel_env-opt/bin/bazel_env/bin
-PATH_add bazel-out/bazel_env-opt/bin/bazel_env/bin
-if [[ ! -d bazel-out/bazel_env-opt/bin/bazel_env/bin ]]; then
-  log_error "ERROR[bazel_env.bzl]: Run 'bazel run //:bazel_env' to regenerate bazel-out/bazel_env-opt/bin/bazel_env/bin"
-fi
-
-3. Allowlist the file with 'direnv allow .envrc'.
+2. Run 'direnv allow' to allowlist your .envrc file.
 ```
 
 2. Run the target again to get a list of all tools and toolchains:
@@ -100,7 +96,7 @@ fi
 ====== bazel_env ======
 
 ✅ direnv is installed
-✅ direnv added bazel-out/bazel_env-opt/bin/bazel_env/bin to PATH
+✅ direnv added ./.bazel_env/bin to PATH
 
 Tools available in PATH:
   * buildifier: @buildifier_prebuilt//:buildifier
@@ -108,13 +104,16 @@ Tools available in PATH:
   * jar:        $(JAVABASE)/bin/jar
   * java:       $(JAVA)
 
+ℹ️  The bin directory is also reachable at bazel-out/bazel_env-opt/bin/bazel_env/bin relative to the workspace root.
+
 Toolchains available at stable relative paths:
-  * jdk: bazel-out/bazel_env-opt/bin/bazel_env/toolchains/jdk
+  * jdk: .bazel_env/toolchains/jdk
 ```
 
 ### Without `direnv` (e.g., in CI)
 
 Run the `print-path` subcommand of the `bazel_env` target and manually add its output to your `PATH`.
+The printed path goes through the `.bazel_env` symlink, which the subcommand creates if needed.
 For GitHub Actions, this can be done as follows:
 
 ```

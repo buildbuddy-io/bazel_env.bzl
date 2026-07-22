@@ -301,6 +301,14 @@ def _tool_impl(ctx):
         [".."] * (2 + bazel_env_name.count("/")) + [bazel_env_name + "_all_tools"],
     )
 
+    # Workspace-root-relative path of this launcher when it is reached through
+    # the package-scoped symlink maintained by the status script. The launcher
+    # matches it as an exact suffix of its own path to derive the workspace
+    # root.
+    symlink_suffix = "." + ctx.label.name
+    if ctx.label.package:
+        symlink_suffix = ctx.label.package + "/" + symlink_suffix
+
     ctx.actions.expand_template(
         template = ctx.file._launcher,
         output = out,
@@ -308,6 +316,7 @@ def _tool_impl(ctx):
         substitutions = {
             "{{all_tools_path}}": all_tools_path,
             "{{bazel_env_label}}": str(ctx.label).removeprefix("@@").removesuffix("/tools/" + name),
+            "{{symlink_suffix}}": symlink_suffix,
             "{{rlocation_path}}": rlocation_path,
             "{{sha256sum_rlocation_path}}": _rlocation_path(ctx, sha256sum.executable),
             "{{extra_env}}": "\n".join([

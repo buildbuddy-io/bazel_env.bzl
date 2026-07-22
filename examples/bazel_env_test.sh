@@ -253,6 +253,65 @@ if echo "$external_output" | grep -q "^find:"; then
   exit 1
 fi
 
+# The launcher derives the source workspace from the invocation path also when
+# a tool is invoked through the package-scoped symlink, so the auto-rebuild
+# triggers from any working directory. With a missing lock file, exactly one
+# rebuild must happen.
+rm -f "$build_workspace_directory/bazel_env.lock"
+symlink_rebuild_marker=$(mktemp)
+trap 'rm -f "$symlink_rebuild_marker"' EXIT
+symlink_external_output=$(cd "$external_tmpdir" && env \
+    -u TEST_SRCDIR \
+    -u RUNFILES_DIR \
+    -u RUNFILES_MANIFEST_FILE \
+    FAKE_BAZEL_MARKER_FILE="$symlink_rebuild_marker" \
+    BAZEL="$build_workspace_directory/fake_bazel.sh" \
+    PATH="$build_workspace_directory/.bazel_env/bin:/bin:/usr/bin" \
+    buildifier --version 2>&1) || {
+  echo "Running buildifier through the package-scoped symlink from outside the workspace failed:"
+  echo "$symlink_external_output"
+  exit 1
+}
+assert_contains "Detected changes in watched files, rebuilding bazel_env..." "$symlink_external_output"
+assert_contains "buildifier version:" "$symlink_external_output"
+rebuild_count=$(wc -l < "$symlink_rebuild_marker" | tr -d ' ')
+if [[ "$rebuild_count" != 1 ]]; then
+  echo "Expected exactly one rebuild through the package-scoped symlink, got $rebuild_count"
+  exit 1
+fi
+
+# The workspace derivation matches the symlink-based launcher path as an exact
+# suffix, so a directory elsewhere in the path that shares the symlink's name
+# does not change the derived workspace. The workspace is reached through a
+# symlink inside a directory literally named like the package-scoped symlink,
+# and the rebuild still fires exactly once.
+hostile_base=$(mktemp -d 2>/dev/null || mktemp -d -t 'hostile_base')
+trap 'rm -rf "$hostile_base"' EXIT
+mkdir -p "$hostile_base/.bazel_env"
+ln -s "$build_workspace_directory" "$hostile_base/.bazel_env/ws"
+rm -f "$build_workspace_directory/bazel_env.lock"
+hostile_marker=$(mktemp)
+trap 'rm -f "$hostile_marker"' EXIT
+hostile_output=$(cd "$external_tmpdir" && env \
+    -u TEST_SRCDIR \
+    -u RUNFILES_DIR \
+    -u RUNFILES_MANIFEST_FILE \
+    FAKE_BAZEL_MARKER_FILE="$hostile_marker" \
+    BAZEL="$build_workspace_directory/fake_bazel.sh" \
+    PATH="$hostile_base/.bazel_env/ws/.bazel_env/bin:/bin:/usr/bin" \
+    buildifier --version 2>&1) || {
+  echo "Running buildifier through a path containing a hostile directory name failed:"
+  echo "$hostile_output"
+  exit 1
+}
+assert_contains "Detected changes in watched files, rebuilding bazel_env..." "$hostile_output"
+assert_contains "buildifier version:" "$hostile_output"
+hostile_rebuild_count=$(wc -l < "$hostile_marker" | tr -d ' ')
+if [[ "$hostile_rebuild_count" != 1 ]]; then
+  echo "Expected exactly one rebuild through the hostile path, got $hostile_rebuild_count"
+  exit 1
+fi
+
 #### Auto-rebuild logs go to stderr, not stdout ####
 
 # When watched files change, the launcher runs a bazel build to rebuild

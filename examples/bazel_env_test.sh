@@ -12,7 +12,7 @@ function assert_cmd_output() {
   local -r extra_path="${3:-}"
   local -r no_bazel_check="${4:-}"
 
-  local -r bazel_env="$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/bin"
+  local -r bazel_env="${BAZEL_ENV_BIN_DIR:-$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/bin}"
   local -r fake_bazel_marker_file=$(mktemp)
   # The env var is no longer defined when the trap runs, so expand it early.
   # shellcheck disable=SC2064
@@ -80,39 +80,26 @@ touch "$tmpdir/direnv"
 chmod +x "$tmpdir/direnv"
 
 # Imitate a bazel run environment for the status script.
-# The bazel_env.sh script expects specific directory structure to exist relative to itself
-# to determine the workspace root. In the test sandbox, these output directories are not
-# fully populated, so we create them manually.
-mkdir -p bazel_env/bin
-touch bazel_env/bin/bazel-cc
 status_out=$(PATH="$tmpdir:$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/bin:/bin:/usr/bin" \
 BUILD_WORKSPACE_DIRECTORY="$build_workspace_directory" \
   ./bazel_env.sh) || {
-    # Expected to fail because the unique bin tool isn't in PATH (we didn't mock it running)
-    true
+    echo "Status script failed with output:"
+    echo "$status_out"
+    exit 1
   }
 
-# Verify that the .bazel_env symlink was created in the workspace root.
+# Verify that the symlink exists in the package of the bazel_env target and
+# resolves to the physical location of the bazel_env output directory.
 if [[ ! -L "$build_workspace_directory/.bazel_env" ]]; then
-  echo "Error: .bazel_env symlink was not created in workspace root"
+  echo "Error: .bazel_env symlink was not created in the package directory"
   exit 1
 fi
-
-# Verify the symlink points to the correct location (parent of bazel_env/bin)
-# In this test environment, bazel_env is at bazel-out/bazel_env-opt/bin/bazel_env
-# So .bazel_env should point to bazel-out/bazel_env-opt/bin/bazel_env
-expected_target="$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env"
-# resolve the symlink relative to the directory it's in (if it's a relative symlink)
-# but in the script we create it as 'ln -s "$BAZEL_ENV_ROOT" "$SYMLINK_NAME"' where BAZEL_ENV_ROOT is absolute.
-# Let's check where it points.
-actual_target="$(readlink "$build_workspace_directory/.bazel_env")"
-
-# We check if it points to the directory containing bin/
-if [[ "$actual_target" != *"/bazel_env" ]]; then
-   echo "Error: .bazel_env symlink points to '$actual_target', expected it to end with '/bazel_env'"
-   exit 1
+actual_target="$(cd "$build_workspace_directory/.bazel_env" && pwd -P)"
+expected_target="$(cd "$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env" && pwd -P)"
+if [[ "$actual_target" != "$expected_target" ]]; then
+  echo "Error: .bazel_env symlink resolves to '$actual_target', expected '$expected_target'"
+  exit 1
 fi
-
 
 # shellcheck disable=SC2016
 function expected_output {
@@ -195,6 +182,16 @@ assert_cmd_output "rustc --version" "rustc 1.80.0 (051478957 2024-07-21)"
 assert_cmd_output "rustfmt --version" "rustfmt 1.7.0-stable (0514789* 2024-07-21)"
 assert_cmd_output "ibazel" "iBazel - Version v0.25.3"
 assert_cmd_output "terraform --version" "Terraform v1.9.3"
+
+#### Tools via the package-scoped symlink ####
+
+# The launchers are also reachable through the package-scoped symlink and
+# behave identically to the bazel-out path style.
+BAZEL_ENV_BIN_DIR="$build_workspace_directory/.bazel_env/bin"
+assert_cmd_output "buildifier --version" "buildifier version: 7.3.1 "
+assert_cmd_output "loc_tool" "found: *location_test_data*"
+assert_cmd_output "python_tool" "python_tool version 0.0.1" ":$(dirname "$(which python3)")"
+unset BAZEL_ENV_BIN_DIR
 
 #### Binary args and env forwarding ####
 

@@ -32,14 +32,17 @@ cd "$BUILD_WORKSPACE_DIRECTORY/{{package_path}}"
 
 SYMLINK_NAME="{{symlink_name}}"
 
-if [[ -L "$SYMLINK_NAME" || ! -e "$SYMLINK_NAME" ]]; then
-  rm "$SYMLINK_NAME" 2>/dev/null || true
-else
+if [[ -e "$SYMLINK_NAME" && ! -L "$SYMLINK_NAME" ]]; then
   echo "Error: '$SYMLINK_NAME' exists and is not a symlink. Aborting to prevent data loss." >&2
   exit 1
 fi
 
-ln -s "$BAZEL_ENV_ROOT" "$SYMLINK_NAME"
+# Only touch the symlink when its target is out of date so that repeated runs
+# do not update its timestamp.
+if [[ "$(readlink "$SYMLINK_NAME" 2>/dev/null)" != "$BAZEL_ENV_ROOT" ]]; then
+  rm -f "$SYMLINK_NAME"
+  ln -s "$BAZEL_ENV_ROOT" "$SYMLINK_NAME"
+fi
 
 if [[ "$subcommand" == "print-path" ]]; then
   echo "$PWD/$SYMLINK_NAME/bin"

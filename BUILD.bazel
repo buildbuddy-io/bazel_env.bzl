@@ -27,6 +27,7 @@ exports_files(
     [
         "status.sh.tpl",
         "launcher.sh.tpl",
+        "lock_lib.sh",
     ],
     visibility = ["//visibility:private"],
 )

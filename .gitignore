@@ -3,3 +3,4 @@ MODULE.bazel.lock
 .ijwb
 .idea
 bazel_env.lock
+bazel_env.lock.*

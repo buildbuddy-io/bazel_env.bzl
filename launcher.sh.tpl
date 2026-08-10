@@ -58,44 +58,24 @@ files_to_watch=()
 # Fall back to workspace_path if source_workspace_path is empty.
 watch_base="${source_workspace_path:-$workspace_path}"
 
-if [[ -f "${own_dir}/__common_watch_dirs.txt" ]]; then
-  for dir in $(cat "${own_dir}/__common_watch_dirs.txt"); do
-    if [[ -d "$watch_base/$dir" ]]; then
-      for file in $(find "$watch_base/$dir" -type f); do
-        files_to_watch+=("$file")
-      done
-    fi
-  done
-fi
-
-if [[ -f "${own_dir}/__common_watch_files.txt" ]]; then
-  for file in $(cat "${own_dir}/__common_watch_files.txt"); do
-    if [[ -f "$watch_base/$file" ]]; then
-      files_to_watch+=("$watch_base/$file")
-    fi
-  done
-fi
-
-if [[ -f "${own_dir}/_${own_name}_watch_dirs.txt" ]]; then
-  for dir in $(cat "${own_dir}/_${own_name}_watch_dirs.txt"); do
-    if [[ -d "$watch_base/$dir" ]]; then
-      for file in $(find "$watch_base/$dir" -type f); do
-        files_to_watch+=("$file")
-      done
-    fi
-  done
-fi
-
-if [[ -f "${own_dir}/_${own_name}_watch_files.txt" ]]; then
-  for file in $(cat "${own_dir}/_${own_name}_watch_files.txt"); do
-    if [[ -f "$watch_base/$file" ]]; then
-      files_to_watch+=("$watch_base/$file")
-    fi
-  done
-fi
-
 rebuild_env=False
 sha256_cmd="${own_path}.runfiles/{{sha256sum_rlocation_path}}"
+
+# Enumerate this tool's watched files via the shared helper so the launcher and
+# the status script (bazel run) agree on the exact contents of bazel_env.lock.
+# Sourcing can fail if the runfiles tree is incomplete, 
+# treat that as staleness so the rebuild below repairs the runfiles tree.
+if source "${own_path}.runfiles/{{lock_lib_rlocation_path}}" 2>/dev/null; then
+  while IFS= read -r _watch_file; do
+    files_to_watch+=("$_watch_file")
+  done < <(bazel_env_collect_watch_files "$watch_base" \
+    "${own_dir}/__common_watch_dirs.txt" \
+    "${own_dir}/__common_watch_files.txt" \
+    "${own_dir}/_${own_name}_watch_dirs.txt" \
+    "${own_dir}/_${own_name}_watch_files.txt")
+else
+  rebuild_env=True
+fi
 
 if [[ ${#files_to_watch[@]} -gt 0 ]]; then
   lock_file="$watch_base/bazel_env.lock"
@@ -164,18 +144,9 @@ if [[ $rebuild_env == True && "${BAZEL_ENV_INTERNAL_EXEC:-False}" != True ]]; th
   # Run bazel from the source workspace to ensure it can find the WORKSPACE/MODULE file.
   # Redirect stdout to stderr so build logs don't pollute stdout and break piping.
   (cd "$watch_base" && "${BAZEL:-bazel}" build {{bazel_env_label}} >&2)
-  tmp=$(mktemp)
-  trap 'rm -f "$tmp"' EXIT INT TERM
-  awk '
-    NR==FNR { files[$0]=1; next }
-    {
-      match($0, /^[^ ]+ +/)
-      filepath = substr($0, RSTART + RLENGTH)
-      if (!(filepath in files)) print
-    }
-  ' <(printf "%s\n" "${files_to_watch[@]}") "$lock_file" > "$tmp" 2>/dev/null || true
-  "$sha256_cmd" "${files_to_watch[@]}" >> "$tmp"
-  mv "$tmp" "$lock_file"
+  if [[ ${#files_to_watch[@]} -gt 0 ]]; then
+    bazel_env_merge_lock "$sha256_cmd" "$lock_file" "${files_to_watch[@]}" || true
+  fi
   BAZEL_ENV_INTERNAL_EXEC=True exec "$own_path" "$@"
 fi
 

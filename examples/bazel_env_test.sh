@@ -97,6 +97,7 @@ function expected_output {
 
 ✅ direnv is installed
 ✅ direnv added bazel-out/bazel_env-opt/bin/bazel_env/bin to PATH
+✅ Refreshed bazel_env.lock
 
 Tools available in PATH:
   * bazel-cc:    \$(CC)
@@ -131,6 +132,49 @@ ${toolchain_type_toolchains}
 }
 
 diff <(expected_output "$BAZEL_REPO_NAME_SEPARATOR" "$TOOLCHAIN_TYPES_SUPPORTED") <(echo "$status_out") || exit 1
+
+#### Lock seeding ####
+
+# The status script (bazel run) seeds bazel_env.lock so freshly built tools are
+# not treated as stale on their first invocation.
+# Verify it was written and covers the _common watch files.
+lock_file="$build_workspace_directory/bazel_env.lock"
+[[ -s "$lock_file" ]] || { echo "bazel_env.lock was not created or is empty"; exit 1; }
+assert_contains "$build_workspace_directory/MODULE.bazel" "$(cat "$lock_file")"
+assert_contains "$build_workspace_directory/BUILD.bazel" "$(cat "$lock_file")"
+
+#### Lock merge ####
+
+# The lock is shared by every bazel_env target in the workspace, so re-seeding
+# merges rather than overwrites: entries this run doesn't manage (e.g. another
+# bazel_env target's) must survive, and our own watched files must still be
+# present afterwards.
+foreign_path="$build_workspace_directory/other-bazel-env-entry.txt"
+printf '%s  %s\n' "0000000000000000000000000000000000000000000000000000000000000000" "$foreign_path" >> "$lock_file"
+
+PATH="$tmpdir:$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/bin:/bin:/usr/bin" \
+BUILD_WORKSPACE_DIRECTORY="$build_workspace_directory" \
+  ./bazel_env.sh >/dev/null || { echo "Status re-run failed"; exit 1; }
+
+# the foreign entry (another target's) must be preserved, not clobbered
+if ! grep -qF -- "$foreign_path" "$lock_file"; then
+  echo "Re-seed clobbered an unrelated entry in bazel_env.lock:"
+  cat "$lock_file"
+  exit 1
+fi
+# our own watched file must still be present (refreshed)
+assert_contains "$build_workspace_directory/MODULE.bazel" "$(cat "$lock_file")"
+
+#### Seed suppresses the first-use rebuild ####
+assert_cmd_output "buildifier --version" "buildifier version: 7.3.1 "
+
+#### A watched-file change after seeding still rebuilds ####
+
+corrupt=$(mktemp)
+awk -v f="$build_workspace_directory/MODULE.bazel" '
+  { match($0, /^[^ ]+ +/); p = substr($0, RSTART + RLENGTH); if (p == f) $0 = "0000000000000000000000000000000000000000000000000000000000000000  " f; print }
+' "$lock_file" > "$corrupt" && mv "$corrupt" "$lock_file"
+assert_cmd_output "buildifier --version" "Detected changes in watched files, rebuilding bazel_env..."
 
 #### Tools ####
 

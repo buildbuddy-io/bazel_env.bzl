@@ -129,10 +129,30 @@ if [[ ${#files_to_watch[@]} -gt 0 ]]; then
     rebuild_env=True
   fi
 fi
+watch_files_stale=$rebuild_env
+
+# The entry point resolves through absolute symlinks into Bazel's output base
+# and repo caches, which Bazel can delete out from under a previously built
+# tool (repo contents cache GC, a clean, external cache cleaners) — it cannot
+# see references held by prebuilt wrappers. Exec'ing would fail with a bare
+# "No such file or directory"; rebuild instead, which re-fetches the deleted
+# repos and makes the existing symlinks resolve again.
+case "{{rlocation_path}}" in
+  /*) entry_point="{{rlocation_path}}" ;;
+  *) entry_point="${own_path}.runfiles/{{rlocation_path}}" ;;
+esac
+entry_point_missing=False
+if [[ ! -e "$entry_point" ]]; then
+  entry_point_missing=True
+  rebuild_env=True
+fi
 
 if [[ $rebuild_env == True && "${BAZEL_ENV_INTERNAL_EXEC:-False}" != True ]]; then
-  echo "Detected changes in watched files, rebuilding bazel_env..." >&2
-  if [[ ${#files_to_watch[@]} -gt 0 ]]; then
+  if [[ $entry_point_missing == True ]]; then
+    echo "$own_name's entry point is missing from its runfiles (deleted by a Bazel clean or repo cache GC?), rebuilding bazel_env..." >&2
+  fi
+  if [[ $watch_files_stale == True ]]; then
+    echo "Detected changes in watched files, rebuilding bazel_env..." >&2
     echo "Changed files:" >&2
     for file in "${files_to_watch[@]}"; do
       if [[ -f "$file" ]]; then
@@ -164,18 +184,23 @@ if [[ $rebuild_env == True && "${BAZEL_ENV_INTERNAL_EXEC:-False}" != True ]]; th
   # Run bazel from the source workspace to ensure it can find the WORKSPACE/MODULE file.
   # Redirect stdout to stderr so build logs don't pollute stdout and break piping.
   (cd "$watch_base" && "${BAZEL:-bazel}" build {{bazel_env_label}} >&2)
-  tmp=$(mktemp)
-  trap 'rm -f "$tmp"' EXIT INT TERM
-  awk '
-    NR==FNR { files[$0]=1; next }
-    {
-      match($0, /^[^ ]+ +/)
-      filepath = substr($0, RSTART + RLENGTH)
-      if (!(filepath in files)) print
-    }
-  ' <(printf "%s\n" "${files_to_watch[@]}") "$lock_file" > "$tmp" 2>/dev/null || true
-  "$sha256_cmd" "${files_to_watch[@]}" >> "$tmp"
-  mv "$tmp" "$lock_file"
+  # A rebuild triggered by a missing entry point alone has no watched files, and
+  # then there is no lock file to refresh (and sha256sum with no arguments would
+  # hang reading stdin).
+  if [[ ${#files_to_watch[@]} -gt 0 ]]; then
+    tmp=$(mktemp)
+    trap 'rm -f "$tmp"' EXIT INT TERM
+    awk '
+      NR==FNR { files[$0]=1; next }
+      {
+        match($0, /^[^ ]+ +/)
+        filepath = substr($0, RSTART + RLENGTH)
+        if (!(filepath in files)) print
+      }
+    ' <(printf "%s\n" "${files_to_watch[@]}") "$lock_file" > "$tmp" 2>/dev/null || true
+    "$sha256_cmd" "${files_to_watch[@]}" >> "$tmp"
+    mv "$tmp" "$lock_file"
+  fi
   BAZEL_ENV_INTERNAL_EXEC=True exec "$own_path" "$@"
 fi
 

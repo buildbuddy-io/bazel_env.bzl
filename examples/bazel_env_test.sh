@@ -312,3 +312,55 @@ if [[ "$(cat "$observation_file")" != "absent" ]]; then
   echo "Expected the launcher to delete $all_tools_out before invoking bazel, but it still existed"
   exit 1
 fi
+
+#### Auto-rebuild when a tool's entry point no longer resolves ####
+
+# A prebuilt wrapper can outlive the files its runfiles symlinks point at
+# (a bazel clean, Bazel 9's repo contents cache GC, external cache cleaners).
+# The launcher must detect the dangling entry point and trigger a rebuild
+# instead of exec'ing into a bare "No such file or directory".
+
+# bin/jq is a trampoline; the real launcher (and its runfiles) live under
+# tools/.
+jq_wrapper="$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/tools/jq"
+# The entry point's rlocation path is baked into the wrapper as the subject of
+# its case statements; extract it rather than hardcoding the repo name
+# separator. The BASH_SOURCE case statement doesn't match: its subject
+# contains a '$'.
+jq_entry_point="$(sed -n 's/^case "\([^$]*\)" in$/\1/p' "$jq_wrapper" | head -n 1)"
+if [[ -z "$jq_entry_point" || ! -e "$jq_wrapper.runfiles/$jq_entry_point" ]]; then
+  echo "Failed to extract jq's entry point from its wrapper (got: '$jq_entry_point')"
+  exit 1
+fi
+mv "$jq_wrapper.runfiles/$jq_entry_point" "$jq_wrapper.runfiles/$jq_entry_point.hidden"
+
+dangling_marker=$(mktemp)
+trap 'rm -f "$rebuild_stdout" "$rebuild_stderr" "$rebuild_marker" "$observation_file" "$repair_marker" "$dangling_marker"' EXIT
+
+# The fake bazel cannot actually repair the runfiles, so the invocation still
+# fails — what matters is that the launcher diagnosed the dangling entry point
+# and attempted the rebuild.
+if dangling_output=$(env \
+    -u TEST_SRCDIR \
+    -u RUNFILES_DIR \
+    -u RUNFILES_MANIFEST_FILE \
+    FAKE_BAZEL_MARKER_FILE="$dangling_marker" \
+    BAZEL=./fake_bazel.sh \
+    PATH="$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/bin:/bin:/usr/bin" \
+    jq --version 2>&1); then
+  echo "Expected jq to fail while its entry point is missing (the fake bazel cannot repair it), but it succeeded:"
+  echo "$dangling_output"
+  exit 1
+fi
+
+assert_contains "jq's entry point is missing from its runfiles (deleted by a Bazel clean or repo cache GC?), rebuilding bazel_env..." "$dangling_output"
+
+if [[ ! -s "$dangling_marker" ]]; then
+  echo "Expected the launcher to invoke bazel to repair the dangling entry point"
+  exit 1
+fi
+
+# With the entry point back (as the real bazel build would restore it), the
+# tool works again without a rebuild.
+mv "$jq_wrapper.runfiles/$jq_entry_point.hidden" "$jq_wrapper.runfiles/$jq_entry_point"
+assert_cmd_output "jq --version" "jq-1.7"

@@ -48,9 +48,11 @@ jobs:
       - name: Test examples
         env:
           USE_BAZEL_VERSION: ${{ matrix.bazel }}
+          # See the bazel_head config in examples/.bazelrc.
+          EXTRA_FLAGS: ${{ matrix.bazel == 'last_green' && '--config=bazel_head' || '' }}
         working-directory: ./examples
         # Build first because the tests rely on convenience symlinks.
-        run: bazelisk build //... && bazelisk test //...
+        run: bazelisk build $EXTRA_FLAGS //... && bazelisk test $EXTRA_FLAGS //...
 
       - name: Sanitize Bazel version
         if: always()

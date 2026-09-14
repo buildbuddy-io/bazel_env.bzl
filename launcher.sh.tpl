@@ -23,12 +23,19 @@ _bazel__get_workspace_path() {
 
 # Derive the source workspace from the script's own path.
 # The script lives in the output base (which can be anywhere), but is invoked
-# through the convenience symlink at <workspace>/bazel-out/..., so we can
-# extract the workspace by finding the parent of 'bazel-out' in the invocation path.
+# either through the convenience symlink at <workspace>/bazel-out/... or
+# through the package-scoped symlink maintained by the status script, so we
+# can extract the workspace from the invocation path.
 # This is used for watch_dirs to ensure we watch the correct source files
 # regardless of where the tool is run from.
 _bazel__get_source_workspace_path() {
   local script_path="$1"
+  # Workspace-root-relative path of this launcher when it is reached through
+  # the package-scoped symlink. It is quoted wherever it is used in a pattern
+  # so that bash matches it literally, as an exact suffix, and directories
+  # elsewhere in the path that happen to share the symlink's name cannot
+  # change the result.
+  local symlink_suffix='{{symlink_suffix}}'
   # Extract everything before /bazel-out/
   if [[ "$script_path" == */bazel-out/* ]]; then
     local workspace="${script_path%%/bazel-out/*}"
@@ -36,8 +43,14 @@ _bazel__get_source_workspace_path() {
     workspace="${workspace%/.}"
     workspace="${workspace%/}"
     echo "$workspace"
+  elif [[ "$script_path" == */"$symlink_suffix" ]]; then
+    local workspace="${script_path%/"$symlink_suffix"}"
+    # Remove trailing /. or / if present (can occur with ./relative/paths)
+    workspace="${workspace%/.}"
+    workspace="${workspace%/}"
+    echo "$workspace"
   else
-    # Fallback: not in a bazel-out directory (shouldn't happen)
+    # Fallback: not invoked through a known path style
     echo ""
   fi
 }

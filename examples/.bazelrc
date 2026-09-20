@@ -2,12 +2,6 @@ common --tool_java_runtime_version=remotejdk_17
 common --test_output=errors
 common --check_direct_dependencies=error
 
-# Bazel@HEAD derives the output directory name from the target platform and thus appends an ST hash
-# to "bazel_env-opt" until https://github.com/bazelbuild/bazel/pull/31126 lands. Limiting this to a
-# platform that is never the target platform restores the --cpu based name. Remove this config once
-# the fix is in last_green.
-common:bazel_head --incompatible_limit_platforms_in_output_dir_to=//:exotic_platform
-
 # These settings make it harder for bazel_env to do its job and are here to
 # verify it still works.
 common --incompatible_disallow_empty_glob

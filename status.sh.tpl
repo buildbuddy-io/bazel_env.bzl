@@ -3,7 +3,7 @@
 set -euo pipefail
 
 function fail_with_usage() {
-  echo "Usage: bazel run {{label}} [status|print-path]" >&2
+  echo "Usage: bazel run {{label}} [status|print-path|update-symlink]" >&2
   exit 1
 }
 
@@ -17,7 +17,7 @@ else
   subcommand="status"
 fi
 
-if [[ "$subcommand" != "status" && "$subcommand" != "print-path" ]]; then
+if [[ "$subcommand" != "status" && "$subcommand" != "print-path" && "$subcommand" != "update-symlink" ]]; then
   fail_with_usage
 fi
 
@@ -42,6 +42,10 @@ fi
 if [[ "$(readlink "$SYMLINK_NAME" 2>/dev/null)" != "$BAZEL_ENV_ROOT" ]]; then
   rm -f "$SYMLINK_NAME"
   ln -s "$BAZEL_ENV_ROOT" "$SYMLINK_NAME"
+fi
+
+if [[ "$subcommand" == "update-symlink" ]]; then
+  exit 0
 fi
 
 if [[ "$subcommand" == "print-path" ]]; then

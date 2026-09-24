@@ -2,8 +2,8 @@
 
 set -euo pipefail
 
-if [[ "$*" != "run //:bazel_env -- print-path" ]]; then
-  echo "Expected arguments to be 'run //:bazel_env -- print-path', got '$*'" >&2
+if [[ "$*" != "run //:bazel_env -- update-symlink" ]]; then
+  echo "Expected arguments to be 'run //:bazel_env -- update-symlink', got '$*'" >&2
   exit 1
 fi
 
@@ -22,7 +22,7 @@ fi
 
 # Imitate the run phase of 'bazel run'.
 if [[ -n "${FAKE_BAZEL_RUN_SCRIPT:-}" ]]; then
-  BUILD_WORKSPACE_DIRECTORY="$PWD" "$FAKE_BAZEL_RUN_SCRIPT" print-path
+  BUILD_WORKSPACE_DIRECTORY="$PWD" "$FAKE_BAZEL_RUN_SCRIPT" update-symlink
 fi
 
 exit "${FAKE_BAZEL_EXIT_CODE:-0}"

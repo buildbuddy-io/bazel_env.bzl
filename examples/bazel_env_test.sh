@@ -73,6 +73,19 @@ if [[ ! -d "$print_path_out" ]]; then
   exit 1
 fi
 
+# Verify the update-symlink subcommand prints nothing.
+update_symlink_out=$(PATH="/bin:/usr/bin" \
+BUILD_WORKSPACE_DIRECTORY="$build_workspace_directory" \
+  ./bazel_env.sh update-symlink 2>&1) || {
+    echo "update-symlink failed with output:"
+    echo "$update_symlink_out"
+    exit 1
+  }
+if [[ -n "$update_symlink_out" ]]; then
+  echo "update-symlink printed unexpected output: $update_symlink_out"
+  exit 1
+fi
+
 # Place a fake direnv tool on the PATH.
 tmpdir=$(mktemp -d 2>/dev/null || mktemp -d -t 'tmpdir')
 trap 'rm -rf "$tmpdir"' EXIT

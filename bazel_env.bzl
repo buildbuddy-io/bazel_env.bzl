@@ -12,21 +12,26 @@ def _rlocation_path(ctx, file):
 
 def _heuristic_rlocation_path(ctx, path):
     # type: (ctx, string) -> string
-    if path.startswith("/"):
-        return path
+    # TODO: Remove this workaround once https://github.com/bazelbuild/rules_cc/pull/901 has been
+    # released. rules_cc prefixes tool paths of the C++ toolchain with the package of the
+    # toolchain even if they are paths of generated files, which results in non-existent paths
+    # such as external/<repo>/bazel-out/<cfg>/bin/external/<repo2>/<pkg>/<file>. Only the
+    # observed shape of a toolchain in the root package of an external repository is handled.
+    if path.startswith("external/"):
+        repo_end = path.find("/", len("external/"))
+        if repo_end != -1 and path.startswith("bazel-out/", repo_end + 1):
+            path = path[repo_end + 1:]
 
-    # The path of a generated file, e.g. a compiler wrapper built in the exec
-    # configuration, contains bazel-out/<cfg>/bin. Toolchain rules resolve
-    # relative tool paths against their own package, so the generated file's
-    # path may also be prefixed with external/<repo>/<package>.
-    segments = path.split("/")
-    if "bazel-out" in segments:
-        path = "/".join(segments[segments.index("bazel-out") + 3:])
+    if path.startswith("bazel-out/"):
+        # Skip over bazel-out/<cfg>/bin.
+        path = "/".join(path.split("/")[3:])
 
     if path.startswith("external/"):
         return path.removeprefix("external/")
     elif path.startswith("../"):
         return path[3:]
+    elif path.startswith("/"):
+        return path
     elif not path.startswith(ctx.workspace_name + "/"):
         return ctx.workspace_name + "/" + path
     else:

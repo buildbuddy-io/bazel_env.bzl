@@ -1,5 +1,6 @@
 load("@bazel_features//:features.bzl", "bazel_features")
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rules_cc//cc/common:cc_common.bzl", "cc_common")
 load(":sha256sum_tool.bzl", _Sha256sumInfo = "Sha256sumInfo")
 
 def _rlocation_path(ctx, file):
@@ -11,16 +12,21 @@ def _rlocation_path(ctx, file):
 
 def _heuristic_rlocation_path(ctx, path):
     # type: (ctx, string) -> string
-    if path.startswith("bazel-out/"):
-        # Skip over bazel-out/<cfg>/bin.
-        path = "/".join(path.split("/")[3:])
+    if path.startswith("/"):
+        return path
+
+    # The path of a generated file, e.g. a compiler wrapper built in the exec
+    # configuration, contains bazel-out/<cfg>/bin. Toolchain rules resolve
+    # relative tool paths against their own package, so the generated file's
+    # path may also be prefixed with external/<repo>/<package>.
+    segments = path.split("/")
+    if "bazel-out" in segments:
+        path = "/".join(segments[segments.index("bazel-out") + 3:])
 
     if path.startswith("external/"):
         return path.removeprefix("external/")
     elif path.startswith("../"):
         return path[3:]
-    elif path.startswith("/"):
-        return path
     elif not path.startswith(ctx.workspace_name + "/"):
         return ctx.workspace_name + "/" + path
     else:
@@ -143,7 +149,7 @@ _flip_output_dir = transition(
 )
 
 _ToolInfo = provider(fields = ["name", "raw_tool"])
-_ToolchainInfo = provider(fields = ["files", "label", "variables"])
+_ToolchainInfo = provider(fields = ["env", "files", "label", "variables"])
 _BinaryArgsInfo = provider(fields = ["args"])
 _IsToolchainTypeInfo = provider(fields = [])
 _IsToolchainType = _IsToolchainTypeInfo()
@@ -177,6 +183,29 @@ _is_toolchain_type_flag = rule(
     },
 )
 
+def _cc_toolchain_action_env(ctx, target):
+    # type: (ctx, Target) -> dict[string, string]
+    """Returns the environment Bazel sets for compile actions that use the given C++ toolchain.
+
+    Compiler wrappers such as the one of the Apple C++ toolchain rely on this environment and thus
+    need it to be set also when they are invoked directly via a Make variable such as $(CC).
+    """
+    if cc_common.CcToolchainInfo not in target:
+        return {}
+    cc_toolchain = target[cc_common.CcToolchainInfo]
+    feature_configuration = cc_common.configure_features(
+        ctx = ctx,
+        cc_toolchain = cc_toolchain,
+    )
+    return cc_common.get_environment_variables(
+        feature_configuration = feature_configuration,
+        action_name = "c-compile",
+        variables = cc_common.create_compile_variables(
+            feature_configuration = feature_configuration,
+            cc_toolchain = cc_toolchain,
+        ),
+    )
+
 def _extract_toolchain_info_impl(target, ctx):
     # type: (Target, ctx) -> list[Provider]
     if _BAZEL_ENV_GENRULE_TAG in ctx.rule.attr.tags:
@@ -190,6 +219,7 @@ def _extract_toolchain_info_impl(target, ctx):
     # directly by the user.
     return [
         _ToolchainInfo(
+            env = _cc_toolchain_action_env(ctx, target),
             files = target[DefaultInfo].files,
             label = target.label,
             variables = target[platform_common.TemplateVariableInfo].variables if platform_common.TemplateVariableInfo in target else {},
@@ -198,6 +228,7 @@ def _extract_toolchain_info_impl(target, ctx):
 
 _extract_toolchain_info = aspect(
     implementation = _extract_toolchain_info_impl,
+    fragments = ["cpp"],
     **(
         # This feature is required to extracted the info of the resolved toolchain target from the
         # helper genrule.
@@ -266,11 +297,14 @@ def _tool_impl(ctx):
         raw_path, used_vars = _expand_make_variables(ctx.attr.path, vars)
         rlocation_path = _heuristic_rlocation_path(ctx, raw_path)
 
+        # The tool needs the files and the action environment of the toolchains whose Make
+        # variables its path references.
         transitive_files = []
         for toolchain in ctx.attr.toolchain_targets:
-            for key in toolchain[_ToolchainInfo].variables.keys():
-                if key in used_vars:
-                    transitive_files.append(toolchain[_ToolchainInfo].files)
+            toolchain_info = toolchain[_ToolchainInfo]
+            if any([key in used_vars for key in toolchain_info.variables.keys()]):
+                transitive_files.append(toolchain_info.files)
+                extra_env |= toolchain_info.env
         runfiles = ctx.runfiles(transitive_files = depset(transitive = transitive_files))
     else:
         # There is only ever a single target, the attribute only takes an array value because of the transition.
@@ -637,7 +671,9 @@ def bazel_env(*, name, tools = {}, toolchains = {}, watch_dirs = {}, watch_files
             together with its runfiles.
 
             If a path is provided, Make variables provided by `toolchains` are expanded in it and
-            all the files of referenced toolchains are staged as runfiles.
+            all the files of referenced toolchains are staged as runfiles. If a referenced toolchain
+            is a C++ toolchain, the tool runs with the environment Bazel sets for its compile
+            actions, which compiler wrappers such as the one of the Apple C++ toolchain require.
 
         toolchains: A dictionary mapping toolchain names to their targets. The name is used as the
             basename of the toolchain directory in the `toolchains` directory. The directory is

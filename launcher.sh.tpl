@@ -206,8 +206,21 @@ export PYTHON_RUNFILES="${RUNFILES_DIR}"
 export JS_BINARY__NO_CD_BINDIR=1
 # Let rules_js's js_binary work by allowing it to follow symlinks outside of sandbox.
 export JS_BINARY__PATCH_NODE_FS=0
-# Environment of the executable target.
+# Environment of the executable target or of the toolchain providing the tool.
 {{extra_env}}
+# For actions whose environment requests an Xcode version and an Apple SDK, as
+# the Apple C++ toolchain's does, Bazel's local executor derives DEVELOPER_DIR
+# and SDKROOT at execution time. Mirror this so that the toolchain's compiler
+# wrapper, which requires both, also works when invoked directly.
+if [[ -n "${XCODE_VERSION_OVERRIDE:-}" && -z "${DEVELOPER_DIR:-}" ]]; then
+  DEVELOPER_DIR="$(xcode-select --print-path)"
+  export DEVELOPER_DIR
+fi
+if [[ -n "${APPLE_SDK_PLATFORM:-}" && -z "${SDKROOT:-}" ]]; then
+  apple_sdk="$(echo "$APPLE_SDK_PLATFORM" | tr '[:upper:]' '[:lower:]')${APPLE_SDK_VERSION_OVERRIDE:-}"
+  SDKROOT="$(xcrun --sdk "$apple_sdk" --show-sdk-path)"
+  export SDKROOT
+fi
 
 BUILD_WORKING_DIRECTORY="$(pwd)"
 export BUILD_WORKING_DIRECTORY

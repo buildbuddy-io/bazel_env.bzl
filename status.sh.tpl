@@ -41,7 +41,12 @@ fi
 # do not update its timestamp.
 if [[ "$(readlink "$SYMLINK_NAME" 2>/dev/null)" != "$BAZEL_ENV_ROOT" ]]; then
   rm -f "$SYMLINK_NAME"
-  ln -s "$BAZEL_ENV_ROOT" "$SYMLINK_NAME"
+  # A concurrent run may have recreated the symlink in the meantime.
+  if ! ln_err=$(ln -sn "$BAZEL_ENV_ROOT" "$SYMLINK_NAME" 2>&1) &&
+     [[ "$(readlink "$SYMLINK_NAME" 2>/dev/null)" != "$BAZEL_ENV_ROOT" ]]; then
+    echo "$ln_err" >&2
+    exit 1
+  fi
 fi
 
 if [[ "$subcommand" == "update-symlink" ]]; then

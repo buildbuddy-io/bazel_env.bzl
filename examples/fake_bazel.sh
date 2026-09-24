@@ -2,8 +2,8 @@
 
 set -euo pipefail
 
-if [[ "${*: -1}" != "//:bazel_env" ]]; then
-  echo "Expected last argument to be //:bazel_env, got ${*: -1}" >&2
+if [[ "$*" != "run //:bazel_env -- print-path" ]]; then
+  echo "Expected arguments to be 'run //:bazel_env -- print-path', got '$*'" >&2
   exit 1
 fi
 
@@ -18,6 +18,11 @@ if [[ -n "${FAKE_BAZEL_OBSERVED_FILE:-}" ]]; then
   else
     echo "absent" >> "${FAKE_BAZEL_OBSERVATION_FILE:-/dev/null}"
   fi
+fi
+
+# Imitate the run phase of 'bazel run'.
+if [[ -n "${FAKE_BAZEL_RUN_SCRIPT:-}" ]]; then
+  BUILD_WORKSPACE_DIRECTORY="$PWD" "$FAKE_BAZEL_RUN_SCRIPT" print-path
 fi
 
 exit "${FAKE_BAZEL_EXIT_CODE:-0}"

@@ -175,8 +175,9 @@ if [[ $rebuild_env == True && "${BAZEL_ENV_INTERNAL_EXEC:-False}" != True ]]; th
   # tools, e.g. after a cache cleaner deleted files from the output base.
   rm -f "${own_dir}/{{all_tools_path}}"
   # Run bazel from the source workspace to ensure it can find the WORKSPACE/MODULE file.
+  # 'bazel run' repoints the package-scoped symlink if the output directory moved.
   # Redirect stdout to stderr so build logs don't pollute stdout and break piping.
-  (cd "$watch_base" && "${BAZEL:-bazel}" build {{bazel_env_label}} >&2)
+  (cd "$watch_base" && "${BAZEL:-bazel}" run {{bazel_env_label}} -- update-symlink >&2)
   tmp=$(mktemp)
   trap 'rm -f "$tmp"' EXIT INT TERM
   awk '

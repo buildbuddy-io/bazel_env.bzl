@@ -73,6 +73,19 @@ if [[ ! -d "$print_path_out" ]]; then
   exit 1
 fi
 
+# Verify the update-symlink subcommand prints nothing.
+update_symlink_out=$(PATH="/bin:/usr/bin" \
+BUILD_WORKSPACE_DIRECTORY="$build_workspace_directory" \
+  ./bazel_env.sh update-symlink 2>&1) || {
+    echo "update-symlink failed with output:"
+    echo "$update_symlink_out"
+    exit 1
+  }
+if [[ -n "$update_symlink_out" ]]; then
+  echo "update-symlink printed unexpected output: $update_symlink_out"
+  exit 1
+fi
+
 # Place a fake direnv tool on the PATH.
 tmpdir=$(mktemp -d 2>/dev/null || mktemp -d -t 'tmpdir')
 trap 'rm -rf "$tmpdir"' EXIT
@@ -448,5 +461,39 @@ assert_contains "Detected changes in watched files, rebuilding bazel_env..." "$r
 # bazel so that the action re-executes even on an otherwise fully cached build.
 if [[ "$(cat "$observation_file")" != "absent" ]]; then
   echo "Expected the launcher to delete $all_tools_out before invoking bazel, but it still existed"
+  exit 1
+fi
+
+#### Auto-rebuild repoints the package-scoped symlink ####
+
+# A stale symlink that still resolves, as left behind by a moved output directory.
+stale_dir=$(mktemp -d 2>/dev/null || mktemp -d -t 'stale_dir')
+trap 'rm -rf "$rebuild_stdout" "$rebuild_stderr" "$rebuild_marker" "$observation_file" "$repair_marker" "$stale_dir"; ln -sfn "$expected_target" "$build_workspace_directory/.bazel_env"' EXIT
+ln -s "$expected_target" "$stale_dir/bazel_env"
+ln -sfn "$stale_dir/bazel_env" "$build_workspace_directory/.bazel_env"
+
+# Remove the lock file to force a rebuild on the next tool invocation.
+rm -f "$build_workspace_directory/bazel_env.lock"
+
+repoint_output=$(env \
+    -u TEST_SRCDIR \
+    -u RUNFILES_DIR \
+    -u RUNFILES_MANIFEST_FILE \
+    FAKE_BAZEL_RUN_SCRIPT="$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env.sh" \
+    BAZEL="$build_workspace_directory/fake_bazel.sh" \
+    PATH="$build_workspace_directory/.bazel_env/bin:/bin:/usr/bin" \
+    buildifier --version 2>&1) || {
+  echo "buildifier --version failed during rebuild through a stale symlink:"
+  echo "$repoint_output"
+  exit 1
+}
+
+# Sanity check: a rebuild actually happened (otherwise this test is vacuous).
+assert_contains "Detected changes in watched files, rebuilding bazel_env..." "$repoint_output"
+assert_contains "buildifier version:" "$repoint_output"
+
+actual_link="$(readlink "$build_workspace_directory/.bazel_env")"
+if [[ "$actual_link" != "$expected_target" ]]; then
+  echo "Error: auto-rebuild left .bazel_env pointing at '$actual_link', expected '$expected_target'"
   exit 1
 fi

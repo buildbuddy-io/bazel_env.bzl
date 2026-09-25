@@ -32,22 +32,25 @@ cd "$BUILD_WORKSPACE_DIRECTORY/{{package_path}}"
 
 SYMLINK_NAME="{{symlink_name}}"
 
-if [[ -e "$SYMLINK_NAME" && ! -L "$SYMLINK_NAME" ]]; then
-  echo "Error: '$SYMLINK_NAME' exists and is not a symlink. Aborting to prevent data loss." >&2
-  exit 1
-fi
-
 # Only touch the symlink when its target is out of date so that repeated runs
-# do not update its timestamp.
-if [[ "$(readlink "$SYMLINK_NAME" 2>/dev/null)" != "$BAZEL_ENV_ROOT" ]]; then
-  rm -f "$SYMLINK_NAME"
-  # A concurrent run may have recreated the symlink in the meantime.
-  if ! ln_err=$(ln -sn "$BAZEL_ENV_ROOT" "$SYMLINK_NAME" 2>&1) &&
-     [[ "$(readlink "$SYMLINK_NAME" 2>/dev/null)" != "$BAZEL_ENV_ROOT" ]]; then
-    echo "$ln_err" >&2
+# do not update its timestamp. Retry to tolerate concurrent runs.
+symlink_err=""
+symlink_attempts=0
+while [[ "$(readlink "$SYMLINK_NAME" 2>/dev/null)" != "$BAZEL_ENV_ROOT" ]]; do
+  if [[ $symlink_attempts -ge 10 ]]; then
+    echo "$symlink_err" >&2
     exit 1
   fi
-fi
+  symlink_attempts=$((symlink_attempts + 1))
+  if [[ -L "$SYMLINK_NAME" ]]; then
+    rm -f "$SYMLINK_NAME"
+  elif [[ -e "$SYMLINK_NAME" ]]; then
+    # May be a symlink a concurrent run just created, so retry.
+    symlink_err="Error: '$SYMLINK_NAME' exists and is not a symlink. Aborting to prevent data loss."
+    continue
+  fi
+  symlink_err=$(ln -sn "$BAZEL_ENV_ROOT" "$SYMLINK_NAME" 2>&1) || true
+done
 
 if [[ "$subcommand" == "update-symlink" ]]; then
   exit 0

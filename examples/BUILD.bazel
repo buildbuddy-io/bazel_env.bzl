@@ -116,6 +116,8 @@ sh_test(
         ":bazel_env",
         # Replaces "bazel" in the test script.
         "fake_bazel.sh",
+        # Used to test the setup instructions of a non-root-package target.
+        "//nested:nested_env",
     ],
     env = {
         # The go command shows a warning if HOME is unset.

@@ -23,12 +23,19 @@ _bazel__get_workspace_path() {
 
 # Derive the source workspace from the script's own path.
 # The script lives in the output base (which can be anywhere), but is invoked
-# through the convenience symlink at <workspace>/bazel-out/..., so we can
-# extract the workspace by finding the parent of 'bazel-out' in the invocation path.
+# either through the convenience symlink at <workspace>/bazel-out/... or
+# through the package-scoped symlink maintained by the status script, so we
+# can extract the workspace from the invocation path.
 # This is used for watch_dirs to ensure we watch the correct source files
 # regardless of where the tool is run from.
 _bazel__get_source_workspace_path() {
   local script_path="$1"
+  # Workspace-root-relative path of this launcher when it is reached through
+  # the package-scoped symlink. It is quoted wherever it is used in a pattern
+  # so that bash matches it literally, as an exact suffix, and directories
+  # elsewhere in the path that happen to share the symlink's name cannot
+  # change the result.
+  local symlink_suffix='{{symlink_suffix}}'
   # Extract everything before /bazel-out/
   if [[ "$script_path" == */bazel-out/* ]]; then
     local workspace="${script_path%%/bazel-out/*}"
@@ -36,8 +43,14 @@ _bazel__get_source_workspace_path() {
     workspace="${workspace%/.}"
     workspace="${workspace%/}"
     echo "$workspace"
+  elif [[ "$script_path" == */"$symlink_suffix" ]]; then
+    local workspace="${script_path%/"$symlink_suffix"}"
+    # Remove trailing /. or / if present (can occur with ./relative/paths)
+    workspace="${workspace%/.}"
+    workspace="${workspace%/}"
+    echo "$workspace"
   else
-    # Fallback: not in a bazel-out directory (shouldn't happen)
+    # Fallback: not invoked through a known path style
     echo ""
   fi
 }
@@ -58,24 +71,44 @@ files_to_watch=()
 # Fall back to workspace_path if source_workspace_path is empty.
 watch_base="${source_workspace_path:-$workspace_path}"
 
+if [[ -f "${own_dir}/__common_watch_dirs.txt" ]]; then
+  for dir in $(cat "${own_dir}/__common_watch_dirs.txt"); do
+    if [[ -d "$watch_base/$dir" ]]; then
+      for file in $(find "$watch_base/$dir" -type f); do
+        files_to_watch+=("$file")
+      done
+    fi
+  done
+fi
+
+if [[ -f "${own_dir}/__common_watch_files.txt" ]]; then
+  for file in $(cat "${own_dir}/__common_watch_files.txt"); do
+    if [[ -f "$watch_base/$file" ]]; then
+      files_to_watch+=("$watch_base/$file")
+    fi
+  done
+fi
+
+if [[ -f "${own_dir}/_${own_name}_watch_dirs.txt" ]]; then
+  for dir in $(cat "${own_dir}/_${own_name}_watch_dirs.txt"); do
+    if [[ -d "$watch_base/$dir" ]]; then
+      for file in $(find "$watch_base/$dir" -type f); do
+        files_to_watch+=("$file")
+      done
+    fi
+  done
+fi
+
+if [[ -f "${own_dir}/_${own_name}_watch_files.txt" ]]; then
+  for file in $(cat "${own_dir}/_${own_name}_watch_files.txt"); do
+    if [[ -f "$watch_base/$file" ]]; then
+      files_to_watch+=("$watch_base/$file")
+    fi
+  done
+fi
+
 rebuild_env=False
 sha256_cmd="${own_path}.runfiles/{{sha256sum_rlocation_path}}"
-
-# Enumerate this tool's watched files via the shared helper so the launcher and
-# the status script (bazel run) agree on the exact contents of bazel_env.lock.
-# Sourcing can fail if the runfiles tree is incomplete, 
-# treat that as staleness so the rebuild below repairs the runfiles tree.
-if source "${own_path}.runfiles/{{lock_lib_rlocation_path}}" 2>/dev/null; then
-  while IFS= read -r _watch_file; do
-    files_to_watch+=("$_watch_file")
-  done < <(bazel_env_collect_watch_files "$watch_base" \
-    "${own_dir}/__common_watch_dirs.txt" \
-    "${own_dir}/__common_watch_files.txt" \
-    "${own_dir}/_${own_name}_watch_dirs.txt" \
-    "${own_dir}/_${own_name}_watch_files.txt")
-else
-  rebuild_env=True
-fi
 
 if [[ ${#files_to_watch[@]} -gt 0 ]]; then
   lock_file="$watch_base/bazel_env.lock"
@@ -142,11 +175,21 @@ if [[ $rebuild_env == True && "${BAZEL_ENV_INTERNAL_EXEC:-False}" != True ]]; th
   # tools, e.g. after a cache cleaner deleted files from the output base.
   rm -f "${own_dir}/{{all_tools_path}}"
   # Run bazel from the source workspace to ensure it can find the WORKSPACE/MODULE file.
+  # 'bazel run' repoints the package-scoped symlink if the output directory moved.
   # Redirect stdout to stderr so build logs don't pollute stdout and break piping.
-  (cd "$watch_base" && "${BAZEL:-bazel}" build {{bazel_env_label}} >&2)
-  if [[ ${#files_to_watch[@]} -gt 0 ]]; then
-    bazel_env_merge_lock "$sha256_cmd" "$lock_file" "${files_to_watch[@]}" || true
-  fi
+  (cd "$watch_base" && "${BAZEL:-bazel}" run {{bazel_env_label}} -- update-symlink >&2)
+  tmp=$(mktemp)
+  trap 'rm -f "$tmp"' EXIT INT TERM
+  awk '
+    NR==FNR { files[$0]=1; next }
+    {
+      match($0, /^[^ ]+ +/)
+      filepath = substr($0, RSTART + RLENGTH)
+      if (!(filepath in files)) print
+    }
+  ' <(printf "%s\n" "${files_to_watch[@]}") "$lock_file" > "$tmp" 2>/dev/null || true
+  "$sha256_cmd" "${files_to_watch[@]}" >> "$tmp"
+  mv "$tmp" "$lock_file"
   BAZEL_ENV_INTERNAL_EXEC=True exec "$own_path" "$@"
 fi
 
@@ -164,8 +207,21 @@ export PYTHON_RUNFILES="${RUNFILES_DIR}"
 export JS_BINARY__NO_CD_BINDIR=1
 # Let rules_js's js_binary work by allowing it to follow symlinks outside of sandbox.
 export JS_BINARY__PATCH_NODE_FS=0
-# Environment of the executable target.
+# Environment of the executable target or of the toolchain providing the tool.
 {{extra_env}}
+# For actions whose environment requests an Xcode version and an Apple SDK, as
+# the Apple C++ toolchain's does, Bazel's local executor derives DEVELOPER_DIR
+# and SDKROOT at execution time. Mirror this so that the toolchain's compiler
+# wrapper, which requires both, also works when invoked directly.
+if [[ -n "${XCODE_VERSION_OVERRIDE:-}" && -z "${DEVELOPER_DIR:-}" ]]; then
+  DEVELOPER_DIR="$(xcode-select --print-path)"
+  export DEVELOPER_DIR
+fi
+if [[ -n "${APPLE_SDK_PLATFORM:-}" && -z "${SDKROOT:-}" ]]; then
+  apple_sdk="$(echo "$APPLE_SDK_PLATFORM" | tr '[:upper:]' '[:lower:]')${APPLE_SDK_VERSION_OVERRIDE:-}"
+  SDKROOT="$(xcrun --sdk "$apple_sdk" --show-sdk-path)"
+  export SDKROOT
+fi
 
 BUILD_WORKING_DIRECTORY="$(pwd)"
 export BUILD_WORKING_DIRECTORY

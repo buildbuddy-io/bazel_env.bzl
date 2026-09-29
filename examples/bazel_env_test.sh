@@ -12,7 +12,7 @@ function assert_cmd_output() {
   local -r extra_path="${3:-}"
   local -r no_bazel_check="${4:-}"
 
-  local -r bazel_env="$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/bin"
+  local -r bazel_env="${BAZEL_ENV_BIN_DIR:-$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/bin}"
   local -r fake_bazel_marker_file=$(mktemp)
   # The env var is no longer defined when the trap runs, so expand it early.
   # shellcheck disable=SC2064
@@ -60,11 +60,29 @@ BUILD_WORKSPACE_DIRECTORY="$build_workspace_directory" \
     echo "$print_path_out"
     exit 1
   }
-if [[ "$print_path_out" != "$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/bin" ]]; then
+if [[ "$print_path_out" != "$build_workspace_directory/.bazel_env/bin" ]]; then
   echo "print-path output did not match the expected path:"
   echo "  $print_path_out"
   echo "Expected:"
-  echo "  $build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/bin"
+  echo "  $build_workspace_directory/.bazel_env/bin"
+  exit 1
+fi
+# print-path creates the symlink itself, so the printed path always exists.
+if [[ ! -d "$print_path_out" ]]; then
+  echo "print-path output is not a directory: $print_path_out"
+  exit 1
+fi
+
+# Verify the update-symlink subcommand prints nothing.
+update_symlink_out=$(PATH="/bin:/usr/bin" \
+BUILD_WORKSPACE_DIRECTORY="$build_workspace_directory" \
+  ./bazel_env.sh update-symlink 2>&1) || {
+    echo "update-symlink failed with output:"
+    echo "$update_symlink_out"
+    exit 1
+  }
+if [[ -n "$update_symlink_out" ]]; then
+  echo "update-symlink printed unexpected output: $update_symlink_out"
   exit 1
 fi
 
@@ -83,11 +101,24 @@ BUILD_WORKSPACE_DIRECTORY="$build_workspace_directory" \
     exit 1
   }
 
+# Verify that the symlink exists in the package of the bazel_env target and
+# resolves to the physical location of the bazel_env output directory.
+if [[ ! -L "$build_workspace_directory/.bazel_env" ]]; then
+  echo "Error: .bazel_env symlink was not created in the package directory"
+  exit 1
+fi
+actual_target="$(cd "$build_workspace_directory/.bazel_env" && pwd -P)"
+expected_target="$(cd "$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env" && pwd -P)"
+if [[ "$actual_target" != "$expected_target" ]]; then
+  echo "Error: .bazel_env symlink resolves to '$actual_target', expected '$expected_target'"
+  exit 1
+fi
+
 # shellcheck disable=SC2016
 function expected_output {
   local -r sep="$1"
   if [ "$2" = true ]; then
-    local -r toolchain_type_toolchains="  * go:                bazel-out/bazel_env-opt/bin/bazel_env/toolchains/go
+    local -r toolchain_type_toolchains="  * go:                .bazel_env/toolchains/go
 "
   else
     local -r toolchain_type_toolchains=""
@@ -96,8 +127,7 @@ function expected_output {
 ====== bazel_env ======
 
 ✅ direnv is installed
-✅ direnv added bazel-out/bazel_env-opt/bin/bazel_env/bin to PATH
-✅ Refreshed bazel_env.lock
+✅ direnv added ./.bazel_env/bin to PATH
 
 Tools available in PATH:
   * bazel-cc:    \$(CC)
@@ -119,13 +149,15 @@ Tools available in PATH:
   * ibazel:      @@rules_multitool${sep}${sep}multitool${sep}multitool//tools/ibazel:ibazel
   * terraform:   @@rules_multitool${sep}${sep}multitool${sep}multitool//tools/terraform:terraform
 
+ℹ️  The bin directory is also reachable at bazel-out/bazel_env-opt/bin/bazel_env/bin relative to the workspace root.
+
 Toolchains available at stable relative paths:
-  * cc_toolchain:      bazel-out/bazel_env-opt/bin/bazel_env/toolchains/cc_toolchain
-  * jdk:               bazel-out/bazel_env-opt/bin/bazel_env/toolchains/jdk
-  * python:            bazel-out/bazel_env-opt/bin/bazel_env/toolchains/python
-  * nodejs:            bazel-out/bazel_env-opt/bin/bazel_env/toolchains/nodejs
-  * rust:              bazel-out/bazel_env-opt/bin/bazel_env/toolchains/rust
-  * rules_python_docs: bazel-out/bazel_env-opt/bin/bazel_env/toolchains/rules_python_docs
+  * cc_toolchain:      .bazel_env/toolchains/cc_toolchain
+  * jdk:               .bazel_env/toolchains/jdk
+  * python:            .bazel_env/toolchains/python
+  * nodejs:            .bazel_env/toolchains/nodejs
+  * rust:              .bazel_env/toolchains/rust
+  * rules_python_docs: .bazel_env/toolchains/rules_python_docs
 ${toolchain_type_toolchains}
 ⚠️  Remember to run 'hash -r' in bash to update the locations of binaries on the PATH.
 "
@@ -133,53 +165,58 @@ ${toolchain_type_toolchains}
 
 diff <(expected_output "$BAZEL_REPO_NAME_SEPARATOR" "$TOOLCHAIN_TYPES_SUPPORTED") <(echo "$status_out") || exit 1
 
-#### Lock seeding ####
+#### Non-root package instructions ####
 
-# The status script (bazel run) seeds bazel_env.lock so freshly built tools are
-# not treated as stale on their first invocation.
-# Verify it was written and covers the _common watch files.
-lock_file="$build_workspace_directory/bazel_env.lock"
-[[ -s "$lock_file" ]] || { echo "bazel_env.lock was not created or is empty"; exit 1; }
-assert_contains "$build_workspace_directory/MODULE.bazel" "$(cat "$lock_file")"
-assert_contains "$build_workspace_directory/BUILD.bazel" "$(cat "$lock_file")"
-
-#### Lock merge ####
-
-# The lock is shared by every bazel_env target in the workspace, so re-seeding
-# merges rather than overwrites: entries this run doesn't manage (e.g. another
-# bazel_env target's) must survive, and our own watched files must still be
-# present afterwards.
-foreign_path="$build_workspace_directory/other-bazel-env-entry.txt"
-printf '%s  %s\n' "0000000000000000000000000000000000000000000000000000000000000000" "$foreign_path" >> "$lock_file"
-
-PATH="$tmpdir:$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/bin:/bin:/usr/bin" \
-BUILD_WORKSPACE_DIRECTORY="$build_workspace_directory" \
-  ./bazel_env.sh >/dev/null || { echo "Status re-run failed"; exit 1; }
-
-# the foreign entry (another target's) must be preserved, not clobbered
-if ! grep -qF -- "$foreign_path" "$lock_file"; then
-  echo "Re-seed clobbered an unrelated entry in bazel_env.lock:"
-  cat "$lock_file"
+# The setup instructions anchor at the workspace-root .envrc file and prefix
+# all paths with the package of the bazel_env target. An empty temporary
+# workspace serves as BUILD_WORKSPACE_DIRECTORY so that the check for an
+# existing .envrc file does not suppress the instructions.
+nested_ws=$(mktemp -d 2>/dev/null || mktemp -d -t 'nested_ws')
+trap 'rm -rf "$nested_ws"' EXIT
+mkdir -p "$nested_ws/nested"
+if nested_out=$(PATH="$tmpdir:/bin:/usr/bin" \
+BUILD_WORKSPACE_DIRECTORY="$nested_ws" \
+  ./nested/nested_env.sh 2>&1); then
+  echo "Expected the nested status script to fail without the marker tool on PATH:"
+  echo "$nested_out"
   exit 1
 fi
-# our own watched file must still be present (refreshed)
-assert_contains "$build_workspace_directory/MODULE.bazel" "$(cat "$lock_file")"
+assert_contains "Create a .envrc file next to your MODULE.bazel file" "$nested_out"
+assert_contains "watch_file nested/.nested_env/bin" "$nested_out"
+assert_contains "PATH_add nested/.nested_env/bin" "$nested_out"
+if [[ ! -L "$nested_ws/nested/.nested_env" ]]; then
+  echo "Error: .nested_env symlink was not created in the nested package directory"
+  exit 1
+fi
 
-#### Seed suppresses the first-use rebuild ####
-assert_cmd_output "buildifier --version" "buildifier version: 7.3.1 "
+#### .envrc consistency ####
 
-#### A watched-file change after seeding still rebuilds ####
-
-corrupt=$(mktemp)
-awk -v f="$build_workspace_directory/MODULE.bazel" '
-  { match($0, /^[^ ]+ +/); p = substr($0, RSTART + RLENGTH); if (p == f) $0 = "0000000000000000000000000000000000000000000000000000000000000000  " f; print }
-' "$lock_file" > "$corrupt" && mv "$corrupt" "$lock_file"
-assert_cmd_output "buildifier --version" "Detected changes in watched files, rebuilding bazel_env..."
+# The checked-in .envrc file matches the snippet the status script emits for
+# the root-package target, so the two cannot drift apart. An empty temporary
+# workspace serves as BUILD_WORKSPACE_DIRECTORY so that the instructions are
+# printed.
+envrc_ws=$(mktemp -d 2>/dev/null || mktemp -d -t 'envrc_ws')
+trap 'rm -rf "$envrc_ws"' EXIT
+if envrc_instructions=$(PATH="$tmpdir:/bin:/usr/bin" \
+BUILD_WORKSPACE_DIRECTORY="$envrc_ws" \
+  ./bazel_env.sh 2>&1); then
+  echo "Expected the status script to fail without the marker tool on PATH:"
+  echo "$envrc_instructions"
+  exit 1
+fi
+while IFS= read -r envrc_line; do
+  [[ -z "$envrc_line" ]] && continue
+  assert_contains "$envrc_line" "$envrc_instructions"
+done < "$build_workspace_directory/.envrc"
 
 #### Tools ####
 
 # Ensure repeated test configurations begin with the same auto-rebuild state.
 rm -f "$build_workspace_directory/bazel_env.lock"
+
+# The assertions in this section invoke tools through the bazel-out path style
+# of the bin directory; together with the "Tools via the package-scoped
+# symlink" section, both supported path styles are exercised.
 
 # First call to any bazel_env tool will trigger rebuild
 assert_cmd_output "bazel-cc --version" "Detected changes in watched files, rebuilding bazel_env..."
@@ -191,8 +228,8 @@ case "$(arch)" in
   *) goarch="$(arch)";;
 esac
 assert_cmd_output "go version" "go version go1.21.13 $(uname|tr '[:upper:]' '[:lower:]')/$goarch"
-assert_cmd_output "jar --version" "jar 17.0.17"
-assert_cmd_output "java --version" "openjdk 17.0.17 2025-10-21 LTS"
+assert_cmd_output "jar --version" "jar 17.0.20"
+assert_cmd_output "java --version" "openjdk 17.0.20 2026-07-21 LTS"
 assert_cmd_output "jq --version" "jq-1.7"
 assert_cmd_output "node --version" "v16.18.1"
 assert_cmd_output "pnpm --version" "8.6.7"
@@ -206,6 +243,17 @@ assert_cmd_output "rustc --version" "rustc 1.80.0 (051478957 2024-07-21)"
 assert_cmd_output "rustfmt --version" "rustfmt 1.7.0-stable (0514789* 2024-07-21)"
 assert_cmd_output "ibazel" "iBazel - Version v0.25.3"
 assert_cmd_output "terraform --version" "Terraform v1.9.3"
+
+#### Tools via the package-scoped symlink ####
+
+# The launchers are also reachable through the package-scoped symlink and
+# behave identically to the bazel-out path style. Together with the section
+# above, both supported path styles are exercised.
+BAZEL_ENV_BIN_DIR="$build_workspace_directory/.bazel_env/bin"
+assert_cmd_output "buildifier --version" "buildifier version: 7.3.1 "
+assert_cmd_output "loc_tool" "found: *location_test_data*"
+assert_cmd_output "python_tool" "python_tool version 0.0.1" ":$(dirname "$(which python3)")"
+unset BAZEL_ENV_BIN_DIR
 
 #### Binary args and env forwarding ####
 
@@ -226,7 +274,7 @@ assert_cmd_output "loc_tool" "found: *location_test_data*"
 if [ "$TOOLCHAIN_TYPES_SUPPORTED" = true ]; then
   assert_cmd_output "$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/toolchains/go/bin/go version" "go version go1.21.13 $(uname|tr '[:upper:]' '[:lower:]')/$goarch"
 fi
-assert_cmd_output "$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/toolchains/jdk/bin/java --version" "openjdk 17.0.17 2025-10-21 LTS"
+assert_cmd_output "$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/toolchains/jdk/bin/java --version" "openjdk 17.0.20 2026-07-21 LTS"
 assert_cmd_output "$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/toolchains/python/bin/python3 --version" "Python 3.11.8"
 assert_cmd_output "$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/toolchains/rust/bin/cargo --version" "cargo 1.80.0 (376290515 2024-07-16)"
 assert_cmd_output "$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/toolchains/rust/bin/rustc --version" "rustc 1.80.0 (051478957 2024-07-21)"
@@ -262,6 +310,65 @@ assert_contains "buildifier version:" "$external_output"
 if echo "$external_output" | grep -q "^find:"; then
   echo "Found 'find:' error when running from outside workspace:"
   echo "$external_output"
+  exit 1
+fi
+
+# The launcher derives the source workspace from the invocation path also when
+# a tool is invoked through the package-scoped symlink, so the auto-rebuild
+# triggers from any working directory. With a missing lock file, exactly one
+# rebuild must happen.
+rm -f "$build_workspace_directory/bazel_env.lock"
+symlink_rebuild_marker=$(mktemp)
+trap 'rm -f "$symlink_rebuild_marker"' EXIT
+symlink_external_output=$(cd "$external_tmpdir" && env \
+    -u TEST_SRCDIR \
+    -u RUNFILES_DIR \
+    -u RUNFILES_MANIFEST_FILE \
+    FAKE_BAZEL_MARKER_FILE="$symlink_rebuild_marker" \
+    BAZEL="$build_workspace_directory/fake_bazel.sh" \
+    PATH="$build_workspace_directory/.bazel_env/bin:/bin:/usr/bin" \
+    buildifier --version 2>&1) || {
+  echo "Running buildifier through the package-scoped symlink from outside the workspace failed:"
+  echo "$symlink_external_output"
+  exit 1
+}
+assert_contains "Detected changes in watched files, rebuilding bazel_env..." "$symlink_external_output"
+assert_contains "buildifier version:" "$symlink_external_output"
+rebuild_count=$(wc -l < "$symlink_rebuild_marker" | tr -d ' ')
+if [[ "$rebuild_count" != 1 ]]; then
+  echo "Expected exactly one rebuild through the package-scoped symlink, got $rebuild_count"
+  exit 1
+fi
+
+# The workspace derivation matches the symlink-based launcher path as an exact
+# suffix, so a directory elsewhere in the path that shares the symlink's name
+# does not change the derived workspace. The workspace is reached through a
+# symlink inside a directory literally named like the package-scoped symlink,
+# and the rebuild still fires exactly once.
+hostile_base=$(mktemp -d 2>/dev/null || mktemp -d -t 'hostile_base')
+trap 'rm -rf "$hostile_base"' EXIT
+mkdir -p "$hostile_base/.bazel_env"
+ln -s "$build_workspace_directory" "$hostile_base/.bazel_env/ws"
+rm -f "$build_workspace_directory/bazel_env.lock"
+hostile_marker=$(mktemp)
+trap 'rm -f "$hostile_marker"' EXIT
+hostile_output=$(cd "$external_tmpdir" && env \
+    -u TEST_SRCDIR \
+    -u RUNFILES_DIR \
+    -u RUNFILES_MANIFEST_FILE \
+    FAKE_BAZEL_MARKER_FILE="$hostile_marker" \
+    BAZEL="$build_workspace_directory/fake_bazel.sh" \
+    PATH="$hostile_base/.bazel_env/ws/.bazel_env/bin:/bin:/usr/bin" \
+    buildifier --version 2>&1) || {
+  echo "Running buildifier through a path containing a hostile directory name failed:"
+  echo "$hostile_output"
+  exit 1
+}
+assert_contains "Detected changes in watched files, rebuilding bazel_env..." "$hostile_output"
+assert_contains "buildifier version:" "$hostile_output"
+hostile_rebuild_count=$(wc -l < "$hostile_marker" | tr -d ' ')
+if [[ "$hostile_rebuild_count" != 1 ]]; then
+  echo "Expected exactly one rebuild through the hostile path, got $hostile_rebuild_count"
   exit 1
 fi
 
@@ -354,5 +461,39 @@ assert_contains "Detected changes in watched files, rebuilding bazel_env..." "$r
 # bazel so that the action re-executes even on an otherwise fully cached build.
 if [[ "$(cat "$observation_file")" != "absent" ]]; then
   echo "Expected the launcher to delete $all_tools_out before invoking bazel, but it still existed"
+  exit 1
+fi
+
+#### Auto-rebuild repoints the package-scoped symlink ####
+
+# A stale symlink that still resolves, as left behind by a moved output directory.
+stale_dir=$(mktemp -d 2>/dev/null || mktemp -d -t 'stale_dir')
+trap 'rm -rf "$rebuild_stdout" "$rebuild_stderr" "$rebuild_marker" "$observation_file" "$repair_marker" "$stale_dir"; ln -sfn "$expected_target" "$build_workspace_directory/.bazel_env"' EXIT
+ln -s "$expected_target" "$stale_dir/bazel_env"
+ln -sfn "$stale_dir/bazel_env" "$build_workspace_directory/.bazel_env"
+
+# Remove the lock file to force a rebuild on the next tool invocation.
+rm -f "$build_workspace_directory/bazel_env.lock"
+
+repoint_output=$(env \
+    -u TEST_SRCDIR \
+    -u RUNFILES_DIR \
+    -u RUNFILES_MANIFEST_FILE \
+    FAKE_BAZEL_RUN_SCRIPT="$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env.sh" \
+    BAZEL="$build_workspace_directory/fake_bazel.sh" \
+    PATH="$build_workspace_directory/.bazel_env/bin:/bin:/usr/bin" \
+    buildifier --version 2>&1) || {
+  echo "buildifier --version failed during rebuild through a stale symlink:"
+  echo "$repoint_output"
+  exit 1
+}
+
+# Sanity check: a rebuild actually happened (otherwise this test is vacuous).
+assert_contains "Detected changes in watched files, rebuilding bazel_env..." "$repoint_output"
+assert_contains "buildifier version:" "$repoint_output"
+
+actual_link="$(readlink "$build_workspace_directory/.bazel_env")"
+if [[ "$actual_link" != "$expected_target" ]]; then
+  echo "Error: auto-rebuild left .bazel_env pointing at '$actual_link', expected '$expected_target'"
   exit 1
 fi

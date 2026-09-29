@@ -1,0 +1,17 @@
+load("@bazel_env.bzl", "bazel_env")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+
+# Used to test a bazel_env target in a non-root package.
+bazel_env(
+    name = "nested_env",
+    tools = {
+        "hello": ":hello",
+    },
+    visibility = ["//:__pkg__"],
+)
+
+sh_binary(
+    name = "hello",
+    srcs = ["hello.sh"],
+    tags = ["manual"],
+)

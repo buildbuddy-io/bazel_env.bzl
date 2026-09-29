@@ -1,19 +1,12 @@
 #!/usr/bin/env bash
-# Shared helpers for bazel_env's watch-file lock, sourced by both the per-tool
-# launcher (launcher.sh.tpl) and the status script (status.sh.tpl).
+# Watch-file lock helpers shared by launcher.sh.tpl and status.sh.tpl.
 
-# bazel_env_collect_watch_files <watch_base> <list_file>...
-#
-# In:
-#   <watch_base>    workspace root the list entries are relative to.
-#   <list_file>...  *_watch_dirs.txt (dirs to watch) and/or *_watch_files.txt
-#                   (files to watch); missing list files are ignored.
-# Out (stdout):     every watched file as an absolute path, one per line,
-#                   sorted and de-duplicated (empty if none).
+# Usage: bazel_env_collect_watch_files <watch_base> <list_file>...
+# Prints the sorted, unique absolute paths of all watched files.
 bazel_env_collect_watch_files() {
   local watch_base="$1"
   shift
-  # Canonicalize (resolve symlinks) so launcher and status agree on paths.
+  # Resolve symlinks so launcher and status agree on paths.
   if [[ -d "$watch_base" ]]; then
     watch_base="$(cd "$watch_base" && pwd -P)"
   fi
@@ -41,20 +34,13 @@ bazel_env_collect_watch_files() {
   printf '%s\n' "${out[@]}" | sort -u
 }
 
-# bazel_env_merge_lock <sha256_cmd> <lock_file> <file>...
-#
-# In:
-#   <sha256_cmd>  sha256sum binary used to hash the files.
-#   <lock_file>   lock to update in place (workspace-global, shared by all targets).
-#   <file>...     absolute paths whose lock entries to refresh.
-# Out:            <lock_file> updated - these files' hashes refreshed, all other
-#                 entries kept. Atomic (temp + rename); left untouched on any
-#                 failure (returns non-zero).
+# Usage: bazel_env_merge_lock <sha256_cmd> <lock_file> <file>...
+# Atomically refreshes the hashes of <file>s, keeping other entries.
 bazel_env_merge_lock() {
   local sha256_cmd="$1" lock_file="$2"
   shift 2
   [[ $# -gt 0 ]] || return 0
-  # Run in a subshell so the cleanup trap is scoped here and never touches the caller's traps
+  # Subshell scopes the cleanup trap.
   (
     tmp="$(mktemp "${lock_file}.XXXXXX")" || exit 1
     trap 'rm -f "$tmp"' EXIT INT TERM

@@ -122,7 +122,7 @@ EOF
     exit 1
 fi
 
-# regenerate bazel_env.lock
+# Refresh the workspace-root bazel_env.lock.
 sha256_cmd="${RUNFILES_DIR:-$0.runfiles}/{{sha256sum_rlocation_path}}"
 if [[ -x "$sha256_cmd" ]]; then
   source "${RUNFILES_DIR:-$0.runfiles}/{{lock_lib_rlocation_path}}"
@@ -134,12 +134,11 @@ if [[ -x "$sha256_cmd" ]]; then
   if [[ ${#watch_lists[@]} -gt 0 ]]; then
     while IFS= read -r _watch_file; do
       watched+=("$_watch_file")
-    done < <(bazel_env_collect_watch_files "$PWD" "${watch_lists[@]}")
+    done < <(bazel_env_collect_watch_files "$BUILD_WORKSPACE_DIRECTORY" "${watch_lists[@]}")
   fi
   if [[ ${#watched[@]} -gt 0 ]]; then
-    # Merge into the workspace-global lock (shared by every bazel_env target):
-    # keep entries we don't manage, refresh only our own watched files.
-    if bazel_env_merge_lock "$sha256_cmd" bazel_env.lock "${watched[@]}"; then
+    # The lock is shared by all bazel_env targets, so merge.
+    if bazel_env_merge_lock "$sha256_cmd" "$BUILD_WORKSPACE_DIRECTORY/bazel_env.lock" "${watched[@]}"; then
       echo "✅ Refreshed bazel_env.lock"
     else
       echo "⚠️ Failed to refresh bazel_env.lock" >&2

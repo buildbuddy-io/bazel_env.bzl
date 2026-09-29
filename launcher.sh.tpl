@@ -74,11 +74,10 @@ watch_base="${source_workspace_path:-$workspace_path}"
 rebuild_env=False
 sha256_cmd="${own_path}.runfiles/{{sha256sum_rlocation_path}}"
 
-# Enumerate this tool's watched files via the shared helper so the launcher and
-# the status script (bazel run) agree on the exact contents of bazel_env.lock.
-# Sourcing can fail if the runfiles tree is incomplete,
-# treat that as staleness so the rebuild below repairs the runfiles tree.
-if source "${own_path}.runfiles/{{lock_lib_rlocation_path}}" 2>/dev/null; then
+# Incomplete runfiles count as stale, so the rebuild repairs them.
+# Check first: bash 3.2 exits on a failed source even under 'if'.
+lock_lib="${own_path}.runfiles/{{lock_lib_rlocation_path}}"
+if [[ -f "$lock_lib" ]] && source "$lock_lib"; then
   while IFS= read -r _watch_file; do
     files_to_watch+=("$_watch_file")
   done < <(bazel_env_collect_watch_files "$watch_base" \

@@ -43,7 +43,8 @@ bazel_env_merge_lock() {
   # Subshell scopes the cleanup trap.
   (
     tmp="$(mktemp "${lock_file}.XXXXXX")" || exit 1
-    trap 'rm -f "$tmp"' EXIT INT TERM
+    trap 'rm -f "$tmp"' EXIT
+    trap 'exit 1' INT TERM
     if [[ -f "$lock_file" ]]; then
       awk '
         NR==FNR { seen[$0] = 1; next }

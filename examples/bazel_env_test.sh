@@ -92,6 +92,9 @@ trap 'rm -rf "$tmpdir"' EXIT
 touch "$tmpdir/direnv"
 chmod +x "$tmpdir/direnv"
 
+# Start without a lock so the seeding checks below test the status script.
+rm -f "$build_workspace_directory/bazel_env.lock"
+
 # Imitate a bazel run environment for the status script.
 status_out=$(PATH="$tmpdir:$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/bin:/bin:/usr/bin" \
 BUILD_WORKSPACE_DIRECTORY="$build_workspace_directory" \

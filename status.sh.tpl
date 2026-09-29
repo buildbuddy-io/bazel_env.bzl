@@ -27,6 +27,8 @@ fi
 # including one that suppresses the bazel-* convenience symlinks.
 TOOLS_BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/{{name}}/bin" && pwd -P)"
 BAZEL_ENV_ROOT="$(dirname "$TOOLS_BIN_DIR")"
+# Resolve before the cd below, since the script path may be relative.
+STATUS_RUNFILES_DIR="${RUNFILES_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}").runfiles}"
 
 cd "$BUILD_WORKSPACE_DIRECTORY/{{package_path}}"
 
@@ -123,29 +125,30 @@ EOF
 fi
 
 # Refresh the workspace-root bazel_env.lock.
-sha256_cmd="${RUNFILES_DIR:-$0.runfiles}/{{sha256sum_rlocation_path}}"
-if [[ -x "$sha256_cmd" ]]; then
-  source "${RUNFILES_DIR:-$0.runfiles}/{{lock_lib_rlocation_path}}"
-  watched=()
-  watch_lists=()
-  while IFS= read -r _rel; do
-    [[ -n "$_rel" ]] && watch_lists+=("${RUNFILES_DIR:-$0.runfiles}/$_rel")
-  done < <(printf '%s\n' '{{watch_list_rlocation_paths}}')
-  if [[ ${#watch_lists[@]} -gt 0 ]]; then
+watch_lists=()
+while IFS= read -r _rel; do
+  [[ -n "$_rel" ]] && watch_lists+=("$STATUS_RUNFILES_DIR/$_rel")
+done < <(printf '%s\n' '{{watch_list_rlocation_paths}}')
+if [[ ${#watch_lists[@]} -gt 0 ]]; then
+  sha256_cmd="$STATUS_RUNFILES_DIR/{{sha256sum_rlocation_path}}"
+  lock_lib="$STATUS_RUNFILES_DIR/{{lock_lib_rlocation_path}}"
+  # Check first: bash 3.2 exits on a failed source even under 'if'.
+  if [[ -x "$sha256_cmd" && -f "$lock_lib" ]] && source "$lock_lib"; then
+    watched=()
     while IFS= read -r _watch_file; do
       watched+=("$_watch_file")
     done < <(bazel_env_collect_watch_files "$BUILD_WORKSPACE_DIRECTORY" "${watch_lists[@]}")
-  fi
-  if [[ ${#watched[@]} -gt 0 ]]; then
-    # The lock is shared by all bazel_env targets, so merge.
-    if bazel_env_merge_lock "$sha256_cmd" "$BUILD_WORKSPACE_DIRECTORY/bazel_env.lock" "${watched[@]}"; then
-      echo "✅ Refreshed bazel_env.lock"
-    else
-      echo "⚠️ Failed to refresh bazel_env.lock" >&2
+    if [[ ${#watched[@]} -gt 0 ]]; then
+      # The lock is shared by all bazel_env targets, so merge.
+      if bazel_env_merge_lock "$sha256_cmd" "$BUILD_WORKSPACE_DIRECTORY/bazel_env.lock" "${watched[@]}"; then
+        echo "✅ Refreshed bazel_env.lock"
+      else
+        echo "⚠️ Failed to refresh bazel_env.lock" >&2
+      fi
     fi
+  else
+    echo "⚠️ Lock helpers not found in runfiles; skipped refreshing bazel_env.lock" >&2
   fi
-else
-  echo "⚠️ sha256sum not found in runfiles; skipped refreshing bazel_env.lock" >&2
 fi
 
 cat << 'EOF'

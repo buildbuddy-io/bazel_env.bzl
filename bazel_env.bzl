@@ -565,8 +565,6 @@ def _bazel_env_rule_impl(ctx):
 
     sha256sum = ctx.attr._sha256sum[0][_Sha256sumInfo]
 
-    watch_list_files = ctx.files.tool_dirs + ctx.files.tool_files
-
     status_script = ctx.actions.declare_file(ctx.label.name + ".sh")
 
     symlink_name = ".{}".format(ctx.label.name)
@@ -586,7 +584,7 @@ def _bazel_env_rule_impl(ctx):
             "{{bin_dir}}": bin_dir.path,
             "{{sha256sum_rlocation_path}}": _rlocation_path(ctx, sha256sum.executable),
             "{{lock_lib_rlocation_path}}": _rlocation_path(ctx, ctx.file._lock_lib),
-            "{{watch_list_rlocation_paths}}": "\n".join([_rlocation_path(ctx, f) for f in watch_list_files]),
+            "{{watch_list_rlocation_paths}}": "\n".join([_rlocation_path(ctx, f) for f in direct_inputs]),
             "{{unique_name_tool}}": ctx.attr.unique_marker_name,
             "{{has_tools}}": str(bool(tool_infos)),
             "{{symlink_name}}": symlink_name,
@@ -611,7 +609,7 @@ def _bazel_env_rule_impl(ctx):
         DefaultInfo(
             executable = status_script,
             files = depset([implicit_out, bin_dir]),
-            runfiles = ctx.runfiles([ctx.file._lock_lib] + watch_list_files).merge(sha256sum.default_runfiles),
+            runfiles = ctx.runfiles([ctx.file._lock_lib] + direct_inputs).merge(sha256sum.default_runfiles),
         ),
     ]
 

@@ -1,13 +1,22 @@
 load("@bazel_env.bzl", "bazel_env")
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 
-# Used to test a bazel_env target in a non-root package.
+# Used to test a bazel_env target in a non-root package, without watch files.
 bazel_env(
     name = "nested_env",
     tools = {
         "hello": ":hello",
     },
-    # Workspace-root-relative, to test lock seeding from a non-root package.
+    visibility = ["//:__pkg__"],
+)
+
+# Used to test lock seeding from a non-root package.
+bazel_env(
+    name = "nested_watched_env",
+    tools = {
+        "hello": ":hello",
+    },
+    # Workspace-root-relative.
     watch_files = {
         "hello": ["nested/hello.sh"],
     },

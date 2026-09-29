@@ -118,6 +118,8 @@ sh_test(
         "fake_bazel.sh",
         # Used to test the setup instructions of a non-root-package target.
         "//nested:nested_env",
+        # Used to test lock seeding from a non-root-package target.
+        "//nested:nested_watched_env",
     ],
     env = {
         # The go command shows a warning if HOME is unset.

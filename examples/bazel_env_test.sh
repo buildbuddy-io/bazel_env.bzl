@@ -245,9 +245,9 @@ nested_lock_ws=$(mktemp -d 2>/dev/null || mktemp -d -t 'nested_lock_ws')
 trap 'rm -rf "$nested_lock_ws"' EXIT
 mkdir -p "$nested_lock_ws/nested"
 cp "$build_workspace_directory/nested/hello.sh" "$nested_lock_ws/nested/hello.sh"
-nested_lock_out=$(PATH="$tmpdir:$nested_lock_ws/nested/.nested_env/bin:/bin:/usr/bin" \
+nested_lock_out=$(PATH="$tmpdir:$nested_lock_ws/nested/.nested_watched_env/bin:/bin:/usr/bin" \
 BUILD_WORKSPACE_DIRECTORY="$nested_lock_ws" \
-  ./nested/nested_env.sh 2>&1) || {
+  ./nested/nested_watched_env.sh 2>&1) || {
     echo "Nested status script failed with output:"
     echo "$nested_lock_out"
     exit 1
@@ -259,6 +259,32 @@ if [[ -e "$nested_lock_ws/nested/bazel_env.lock" ]]; then
   echo "Nested target wrote bazel_env.lock into its package directory"
   exit 1
 fi
+
+#### No watch files ####
+
+# Without watch files, status neither touches the lock nor warns, and tools
+# run without a rebuild.
+no_watch_ws=$(mktemp -d 2>/dev/null || mktemp -d -t 'no_watch_ws')
+trap 'rm -rf "$no_watch_ws"' EXIT
+mkdir -p "$no_watch_ws/nested"
+no_watch_out=$(PATH="$tmpdir:$no_watch_ws/nested/.nested_env/bin:/bin:/usr/bin" \
+BUILD_WORKSPACE_DIRECTORY="$no_watch_ws" \
+  ./nested/nested_env.sh 2>&1) || {
+    echo "Status script without watch files failed with output:"
+    echo "$no_watch_out"
+    exit 1
+  }
+if [[ "$no_watch_out" == *bazel_env.lock* ]]; then
+  echo "Status script without watch files mentioned bazel_env.lock:"
+  echo "$no_watch_out"
+  exit 1
+fi
+if [[ -e "$no_watch_ws/bazel_env.lock" ]]; then
+  echo "Status script without watch files wrote bazel_env.lock"
+  exit 1
+fi
+BAZEL_ENV_BIN_DIR="$build_workspace_directory/bazel-out/bazel_env-opt/bin/nested/nested_env/bin" \
+  assert_cmd_output "hello" "hello"
 
 #### Seed suppresses the first-use rebuild ####
 assert_cmd_output "buildifier --version" "buildifier version: 7.3.1 "

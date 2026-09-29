@@ -212,9 +212,7 @@ done < "$build_workspace_directory/.envrc"
 
 #### Lock seeding ####
 
-# The status script (bazel run) seeds bazel_env.lock so freshly built tools are
-# not treated as stale on their first invocation.
-# Verify it was written and covers the _common watch files.
+# The status script seeds the lock with the _common watch files.
 lock_file="$build_workspace_directory/bazel_env.lock"
 [[ -s "$lock_file" ]] || { echo "bazel_env.lock was not created or is empty"; exit 1; }
 assert_contains "$build_workspace_directory/MODULE.bazel" "$(cat "$lock_file")"
@@ -222,10 +220,7 @@ assert_contains "$build_workspace_directory/BUILD.bazel" "$(cat "$lock_file")"
 
 #### Lock merge ####
 
-# The lock is shared by every bazel_env target in the workspace, so re-seeding
-# merges rather than overwrites: entries this run doesn't manage (e.g. another
-# bazel_env target's) must survive, and our own watched files must still be
-# present afterwards.
+# Re-seeding keeps other targets' entries.
 foreign_path="$build_workspace_directory/other-bazel-env-entry.txt"
 printf '%s  %s\n' "0000000000000000000000000000000000000000000000000000000000000000" "$foreign_path" >> "$lock_file"
 
@@ -233,14 +228,34 @@ PATH="$tmpdir:$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/b
 BUILD_WORKSPACE_DIRECTORY="$build_workspace_directory" \
   ./bazel_env.sh >/dev/null || { echo "Status re-run failed"; exit 1; }
 
-# the foreign entry (another target's) must be preserved, not clobbered
 if ! grep -qF -- "$foreign_path" "$lock_file"; then
   echo "Re-seed clobbered an unrelated entry in bazel_env.lock:"
   cat "$lock_file"
   exit 1
 fi
-# our own watched file must still be present (refreshed)
 assert_contains "$build_workspace_directory/MODULE.bazel" "$(cat "$lock_file")"
+
+#### Lock seeding for a non-root package ####
+
+# A non-root package target seeds the workspace-root lock.
+nested_lock_ws=$(mktemp -d 2>/dev/null || mktemp -d -t 'nested_lock_ws')
+trap 'rm -rf "$nested_lock_ws"' EXIT
+mkdir -p "$nested_lock_ws/nested"
+cp "$build_workspace_directory/nested/hello.sh" "$nested_lock_ws/nested/hello.sh"
+nested_lock_out=$(PATH="$tmpdir:$nested_lock_ws/nested/.nested_env/bin:/bin:/usr/bin" \
+BUILD_WORKSPACE_DIRECTORY="$nested_lock_ws" \
+  ./nested/nested_env.sh 2>&1) || {
+    echo "Nested status script failed with output:"
+    echo "$nested_lock_out"
+    exit 1
+  }
+assert_contains "✅ Refreshed bazel_env.lock" "$nested_lock_out"
+[[ -s "$nested_lock_ws/bazel_env.lock" ]] || { echo "Nested target did not seed the workspace-root bazel_env.lock"; exit 1; }
+assert_contains "$nested_lock_ws/nested/hello.sh" "$(cat "$nested_lock_ws/bazel_env.lock")"
+if [[ -e "$nested_lock_ws/nested/bazel_env.lock" ]]; then
+  echo "Nested target wrote bazel_env.lock into its package directory"
+  exit 1
+fi
 
 #### Seed suppresses the first-use rebuild ####
 assert_cmd_output "buildifier --version" "buildifier version: 7.3.1 "

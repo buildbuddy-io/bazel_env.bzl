@@ -7,6 +7,10 @@ bazel_env(
     tools = {
         "hello": ":hello",
     },
+    # Workspace-root-relative, to test lock seeding from a non-root package.
+    watch_files = {
+        "hello": ["nested/hello.sh"],
+    },
     visibility = ["//:__pkg__"],
 )
 

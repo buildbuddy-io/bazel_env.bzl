@@ -50,7 +50,24 @@ function assert_contains() {
   }
 }
 
+# Assert an exact path entry in the lock.
+function assert_lock_has_path() {
+  local -r lock="$1"
+  local -r path="$2"
+  awk -v f="$path" '
+    { match($0, /^[^ ]+ +/); if (substr($0, RSTART + RLENGTH) == f) found = 1 }
+    END { exit !found }
+  ' "$lock" || {
+    echo "Expected an entry for '$path' in $lock:"
+    cat "$lock"
+    exit 1
+  }
+}
+
 #### Status script ####
+
+# print-path seeds the lock too (used by CI).
+rm -f "$build_workspace_directory/bazel_env.lock"
 
 # Verify the print-path subcommand works even without direnv.
 print_path_out=$(PATH="/bin:/usr/bin" \
@@ -85,6 +102,8 @@ if [[ -n "$update_symlink_out" ]]; then
   echo "update-symlink printed unexpected output: $update_symlink_out"
   exit 1
 fi
+
+assert_lock_has_path "$build_workspace_directory/bazel_env.lock" "$build_workspace_directory/MODULE.bazel"
 
 # Place a fake direnv tool on the PATH.
 tmpdir=$(mktemp -d 2>/dev/null || mktemp -d -t 'tmpdir')
@@ -129,9 +148,9 @@ function expected_output {
   printf '%s' "
 ====== bazel_env ======
 
+✅ Refreshed bazel_env.lock
 ✅ direnv is installed
 ✅ direnv added ./.bazel_env/bin to PATH
-✅ Refreshed bazel_env.lock
 
 Tools available in PATH:
   * bazel-cc:    \$(CC)
@@ -243,8 +262,23 @@ assert_contains "$build_workspace_directory/MODULE.bazel" "$(cat "$lock_file")"
 # A non-root package target seeds the workspace-root lock.
 nested_lock_ws=$(mktemp -d 2>/dev/null || mktemp -d -t 'nested_lock_ws')
 trap 'rm -rf "$nested_lock_ws"' EXIT
+# The lock stores physical paths.
+nested_lock_ws_real="$(cd "$nested_lock_ws" && pwd -P)"
 mkdir -p "$nested_lock_ws/nested"
 cp "$build_workspace_directory/nested/hello.sh" "$nested_lock_ws/nested/hello.sh"
+
+# Fresh clone: seeds even though the PATH check fails.
+if fresh_out=$(PATH="$tmpdir:/bin:/usr/bin" \
+BUILD_WORKSPACE_DIRECTORY="$nested_lock_ws" \
+  ./nested/nested_watched_env.sh 2>&1); then
+  echo "Expected the nested status script to fail without the marker tool on PATH:"
+  echo "$fresh_out"
+  exit 1
+fi
+assert_contains "✅ Refreshed bazel_env.lock" "$fresh_out"
+assert_lock_has_path "$nested_lock_ws/bazel_env.lock" "$nested_lock_ws_real/nested/hello.sh"
+rm -f "$nested_lock_ws/bazel_env.lock"
+
 nested_lock_out=$(PATH="$tmpdir:$nested_lock_ws/nested/.nested_watched_env/bin:/bin:/usr/bin" \
 BUILD_WORKSPACE_DIRECTORY="$nested_lock_ws" \
   ./nested/nested_watched_env.sh 2>&1) || {

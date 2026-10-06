@@ -171,7 +171,9 @@ if [[ $rebuild_env == True && "${BAZEL_ENV_INTERNAL_EXEC:-False}" != True ]]; th
   fi
   if [[ ${#files_to_watch[@]} -gt 0 ]]; then
     lock_file="$watch_base/bazel_env.lock"
-    bazel_env_merge_lock "$sha256_cmd" "$lock_file" "${files_to_watch[@]}" || true
+    if ! bazel_env_merge_lock "$sha256_cmd" "$lock_file" "${files_to_watch[@]}"; then
+      echo "Warning: failed to update $lock_file, the next run will rebuild again." >&2
+    fi
   fi
   BAZEL_ENV_INTERNAL_EXEC=True exec "$own_path" "$@"
 fi

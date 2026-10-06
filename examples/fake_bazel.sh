@@ -20,6 +20,11 @@ if [[ -n "${FAKE_BAZEL_OBSERVED_FILE:-}" ]]; then
   fi
 fi
 
+# Imitate a runfiles repair.
+if [[ -n "${FAKE_BAZEL_RESTORE_FROM:-}" ]]; then
+  mv "$FAKE_BAZEL_RESTORE_FROM" "$FAKE_BAZEL_RESTORE_TO"
+fi
+
 # Imitate the run phase of 'bazel run'.
 if [[ -n "${FAKE_BAZEL_RUN_SCRIPT:-}" ]]; then
   BUILD_WORKSPACE_DIRECTORY="$PWD" "$FAKE_BAZEL_RUN_SCRIPT" update-symlink

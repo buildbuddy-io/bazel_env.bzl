@@ -600,18 +600,24 @@ fi
 lock_lib_link="$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/tools/buildifier.runfiles/bazel_env.bzl${BAZEL_REPO_NAME_SEPARATOR}/lock_lib.sh"
 [[ -e "$lock_lib_link" ]] || { echo "lock_lib.sh not found in buildifier's runfiles"; exit 1; }
 mv "$lock_lib_link" "$lock_lib_link.bak"
+# Also make the lock stale.
+rm -f "$build_workspace_directory/bazel_env.lock"
 missing_lib_output=$(env \
     -u TEST_SRCDIR \
     -u RUNFILES_DIR \
     -u RUNFILES_MANIFEST_FILE \
+    FAKE_BAZEL_RESTORE_FROM="$lock_lib_link.bak" \
+    FAKE_BAZEL_RESTORE_TO="$lock_lib_link" \
     BAZEL=./fake_bazel.sh \
     PATH="$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/bin:/bin:/usr/bin" \
     buildifier --version 2>&1) || missing_lib_rc=$?
 # Restore before asserting so that a failure doesn't break the output base.
-mv "$lock_lib_link.bak" "$lock_lib_link"
+[[ -e "$lock_lib_link" ]] || mv "$lock_lib_link.bak" "$lock_lib_link"
 [[ -z "${missing_lib_rc:-}" ]] || { echo "buildifier failed without lock_lib.sh:"; echo "$missing_lib_output"; exit 1; }
 assert_contains "Detected changes in watched files, rebuilding bazel_env..." "$missing_lib_output"
 assert_contains "buildifier version: 7.3.1" "$missing_lib_output"
+# No second rebuild.
+assert_cmd_output "buildifier --version" "buildifier version: 7.3.1 "
 
 #### Auto-rebuild repoints the package-scoped symlink ####
 

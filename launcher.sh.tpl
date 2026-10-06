@@ -89,7 +89,9 @@ bazel_env_collect_launcher_watch_files() {
 # Incomplete runfiles count as stale, so the rebuild repairs them.
 # Check first: bash 3.2 exits on a failed source even under 'if'.
 lock_lib="${own_path}.runfiles/{{lock_lib_rlocation_path}}"
+lock_lib_loaded=False
 if [[ -f "$lock_lib" ]] && source "$lock_lib"; then
+  lock_lib_loaded=True
   bazel_env_collect_launcher_watch_files
 else
   rebuild_env=True
@@ -163,7 +165,12 @@ if [[ $rebuild_env == True && "${BAZEL_ENV_INTERNAL_EXEC:-False}" != True ]]; th
   # 'bazel run' repoints the package-scoped symlink if the output directory moved.
   # Redirect stdout to stderr so build logs don't pollute stdout and break piping.
   (cd "$watch_base" && "${BAZEL:-bazel}" run {{bazel_env_label}} -- update-symlink >&2)
+  # lock_lib.sh is repaired now; seed to avoid a second rebuild.
+  if [[ $lock_lib_loaded == False && -f "$lock_lib" ]] && source "$lock_lib"; then
+    bazel_env_collect_launcher_watch_files
+  fi
   if [[ ${#files_to_watch[@]} -gt 0 ]]; then
+    lock_file="$watch_base/bazel_env.lock"
     bazel_env_merge_lock "$sha256_cmd" "$lock_file" "${files_to_watch[@]}" || true
   fi
   BAZEL_ENV_INTERNAL_EXEC=True exec "$own_path" "$@"

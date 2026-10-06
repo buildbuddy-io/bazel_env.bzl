@@ -288,7 +288,7 @@ BUILD_WORKSPACE_DIRECTORY="$nested_lock_ws" \
   }
 assert_contains "✅ Refreshed bazel_env.lock" "$nested_lock_out"
 [[ -s "$nested_lock_ws/bazel_env.lock" ]] || { echo "Nested target did not seed the workspace-root bazel_env.lock"; exit 1; }
-assert_contains "$nested_lock_ws/nested/hello.sh" "$(cat "$nested_lock_ws/bazel_env.lock")"
+assert_lock_has_path "$nested_lock_ws/bazel_env.lock" "$nested_lock_ws_real/nested/hello.sh"
 if [[ -e "$nested_lock_ws/nested/bazel_env.lock" ]]; then
   echo "Nested target wrote bazel_env.lock into its package directory"
   exit 1

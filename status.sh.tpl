@@ -27,6 +27,8 @@ fi
 # including one that suppresses the bazel-* convenience symlinks.
 TOOLS_BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/{{name}}/bin" && pwd -P)"
 BAZEL_ENV_ROOT="$(dirname "$TOOLS_BIN_DIR")"
+# Resolve before the cd below, since the script path may be relative.
+STATUS_RUNFILES_DIR="${RUNFILES_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}").runfiles}"
 
 cd "$BUILD_WORKSPACE_DIRECTORY/{{package_path}}"
 
@@ -52,11 +54,42 @@ while [[ "$(readlink "$SYMLINK_NAME" 2>/dev/null)" != "$BAZEL_ENV_ROOT" ]]; do
   symlink_err=$(ln -sn "$BAZEL_ENV_ROOT" "$SYMLINK_NAME" 2>&1) || true
 done
 
+# Seeds bazel_env.lock
+function refresh_lock() {
+  watch_lists=()
+  while IFS= read -r _rel; do
+    [[ -n "$_rel" ]] && watch_lists+=("$STATUS_RUNFILES_DIR/$_rel")
+  done < <(printf '%s\n' '{{watch_list_rlocation_paths}}')
+  if [[ ${#watch_lists[@]} -gt 0 ]]; then
+    sha256_cmd="$STATUS_RUNFILES_DIR/{{sha256sum_rlocation_path}}"
+    lock_lib="$STATUS_RUNFILES_DIR/{{lock_lib_rlocation_path}}"
+    # Check first: bash 3.2 exits on a failed source even under 'if'.
+    if [[ -x "$sha256_cmd" && -f "$lock_lib" ]] && source "$lock_lib"; then
+      watched=()
+      while IFS= read -r _watch_file; do
+        watched+=("$_watch_file")
+      done < <(bazel_env_collect_watch_files "$BUILD_WORKSPACE_DIRECTORY" "${watch_lists[@]}")
+      if [[ ${#watched[@]} -gt 0 ]]; then
+        # The lock is shared by all bazel_env targets, so merge.
+        if bazel_env_merge_lock "$sha256_cmd" "$BUILD_WORKSPACE_DIRECTORY/bazel_env.lock" "${watched[@]}"; then
+          echo "✅ Refreshed bazel_env.lock"
+        else
+          echo "⚠️ Failed to refresh bazel_env.lock" >&2
+        fi
+      fi
+    else
+      echo "⚠️ Lock helpers not found in runfiles; skipped refreshing bazel_env.lock" >&2
+    fi
+  fi
+}
+
 if [[ "$subcommand" == "update-symlink" ]]; then
   exit 0
 fi
 
 if [[ "$subcommand" == "print-path" ]]; then
+  # Keep stdout the bare path.
+  refresh_lock >&2
   echo "$PWD/$SYMLINK_NAME/bin"
   exit 0
 fi
@@ -68,6 +101,8 @@ cat << 'EOF'
 EOF
 
 if [[ {{has_tools}} == True ]]; then
+
+refresh_lock
 
 if type direnv >/dev/null 2>/dev/null; then
     echo "✅ direnv is installed"

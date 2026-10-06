@@ -50,7 +50,24 @@ function assert_contains() {
   }
 }
 
+# Assert an exact path entry in the lock.
+function assert_lock_has_path() {
+  local -r lock="$1"
+  local -r path="$2"
+  awk -v f="$path" '
+    { match($0, /^[^ ]+ +/); if (substr($0, RSTART + RLENGTH) == f) found = 1 }
+    END { exit !found }
+  ' "$lock" || {
+    echo "Expected an entry for '$path' in $lock:"
+    cat "$lock"
+    exit 1
+  }
+}
+
 #### Status script ####
+
+# print-path seeds the lock too (used by CI).
+rm -f "$build_workspace_directory/bazel_env.lock"
 
 # Verify the print-path subcommand works even without direnv.
 print_path_out=$(PATH="/bin:/usr/bin" \
@@ -86,11 +103,16 @@ if [[ -n "$update_symlink_out" ]]; then
   exit 1
 fi
 
+assert_lock_has_path "$build_workspace_directory/bazel_env.lock" "$build_workspace_directory/MODULE.bazel"
+
 # Place a fake direnv tool on the PATH.
 tmpdir=$(mktemp -d 2>/dev/null || mktemp -d -t 'tmpdir')
 trap 'rm -rf "$tmpdir"' EXIT
 touch "$tmpdir/direnv"
 chmod +x "$tmpdir/direnv"
+
+# Start without a lock so the seeding checks below test the status script.
+rm -f "$build_workspace_directory/bazel_env.lock"
 
 # Imitate a bazel run environment for the status script.
 status_out=$(PATH="$tmpdir:$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/bin:/bin:/usr/bin" \
@@ -126,6 +148,7 @@ function expected_output {
   printf '%s' "
 ====== bazel_env ======
 
+✅ Refreshed bazel_env.lock
 ✅ direnv is installed
 ✅ direnv added ./.bazel_env/bin to PATH
 
@@ -208,6 +231,113 @@ while IFS= read -r envrc_line; do
   [[ -z "$envrc_line" ]] && continue
   assert_contains "$envrc_line" "$envrc_instructions"
 done < "$build_workspace_directory/.envrc"
+
+#### Lock seeding ####
+
+# The status script seeds the lock with the _common watch files.
+lock_file="$build_workspace_directory/bazel_env.lock"
+[[ -s "$lock_file" ]] || { echo "bazel_env.lock was not created or is empty"; exit 1; }
+assert_contains "$build_workspace_directory/MODULE.bazel" "$(cat "$lock_file")"
+assert_contains "$build_workspace_directory/BUILD.bazel" "$(cat "$lock_file")"
+
+#### Lock merge ####
+
+# Re-seeding keeps other targets' entries.
+foreign_path="$build_workspace_directory/other-bazel-env-entry.txt"
+printf '%s  %s\n' "0000000000000000000000000000000000000000000000000000000000000000" "$foreign_path" >> "$lock_file"
+
+PATH="$tmpdir:$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/bin:/bin:/usr/bin" \
+BUILD_WORKSPACE_DIRECTORY="$build_workspace_directory" \
+  ./bazel_env.sh >/dev/null || { echo "Status re-run failed"; exit 1; }
+
+if ! grep -qF -- "$foreign_path" "$lock_file"; then
+  echo "Re-seed clobbered an unrelated entry in bazel_env.lock:"
+  cat "$lock_file"
+  exit 1
+fi
+assert_contains "$build_workspace_directory/MODULE.bazel" "$(cat "$lock_file")"
+
+#### Lock seeding for a non-root package ####
+
+# A non-root package target seeds the workspace-root lock.
+nested_lock_ws=$(mktemp -d 2>/dev/null || mktemp -d -t 'nested_lock_ws')
+trap 'rm -rf "$nested_lock_ws"' EXIT
+# The lock stores physical paths.
+nested_lock_ws_real="$(cd "$nested_lock_ws" && pwd -P)"
+mkdir -p "$nested_lock_ws/nested"
+cp "$build_workspace_directory/nested/hello.sh" "$nested_lock_ws/nested/hello.sh"
+
+# Fresh clone: seeds even though the PATH check fails.
+if fresh_out=$(PATH="$tmpdir:/bin:/usr/bin" \
+BUILD_WORKSPACE_DIRECTORY="$nested_lock_ws" \
+  ./nested/nested_watched_env.sh 2>&1); then
+  echo "Expected the nested status script to fail without the marker tool on PATH:"
+  echo "$fresh_out"
+  exit 1
+fi
+assert_contains "✅ Refreshed bazel_env.lock" "$fresh_out"
+assert_lock_has_path "$nested_lock_ws/bazel_env.lock" "$nested_lock_ws_real/nested/hello.sh"
+rm -f "$nested_lock_ws/bazel_env.lock"
+
+nested_lock_out=$(PATH="$tmpdir:$nested_lock_ws/nested/.nested_watched_env/bin:/bin:/usr/bin" \
+BUILD_WORKSPACE_DIRECTORY="$nested_lock_ws" \
+  ./nested/nested_watched_env.sh 2>&1) || {
+    echo "Nested status script failed with output:"
+    echo "$nested_lock_out"
+    exit 1
+  }
+assert_contains "✅ Refreshed bazel_env.lock" "$nested_lock_out"
+[[ -s "$nested_lock_ws/bazel_env.lock" ]] || { echo "Nested target did not seed the workspace-root bazel_env.lock"; exit 1; }
+assert_lock_has_path "$nested_lock_ws/bazel_env.lock" "$nested_lock_ws_real/nested/hello.sh"
+if [[ -e "$nested_lock_ws/nested/bazel_env.lock" ]]; then
+  echo "Nested target wrote bazel_env.lock into its package directory"
+  exit 1
+fi
+
+#### No watch files ####
+
+# Without watch files, status neither touches the lock nor warns, and tools
+# run without a rebuild.
+no_watch_ws=$(mktemp -d 2>/dev/null || mktemp -d -t 'no_watch_ws')
+trap 'rm -rf "$no_watch_ws"' EXIT
+mkdir -p "$no_watch_ws/nested"
+no_watch_out=$(PATH="$tmpdir:$no_watch_ws/nested/.nested_env/bin:/bin:/usr/bin" \
+BUILD_WORKSPACE_DIRECTORY="$no_watch_ws" \
+  ./nested/nested_env.sh 2>&1) || {
+    echo "Status script without watch files failed with output:"
+    echo "$no_watch_out"
+    exit 1
+  }
+if [[ "$no_watch_out" == *bazel_env.lock* ]]; then
+  echo "Status script without watch files mentioned bazel_env.lock:"
+  echo "$no_watch_out"
+  exit 1
+fi
+if [[ -e "$no_watch_ws/bazel_env.lock" ]]; then
+  echo "Status script without watch files wrote bazel_env.lock"
+  exit 1
+fi
+BAZEL_ENV_BIN_DIR="$build_workspace_directory/bazel-out/bazel_env-opt/bin/nested/nested_env/bin" \
+  assert_cmd_output "hello" "hello"
+
+#### Seed suppresses the first-use rebuild ####
+
+# Launchers ignore stale watch lists left in bazel-out.
+stale_watch_list="$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/tools/__common_watch_dirs.txt"
+[[ ! -e "$stale_watch_list" ]] || { echo "Unexpected $stale_watch_list"; exit 1; }
+echo " nested " > "$stale_watch_list"
+stale_rc=0
+(assert_cmd_output "buildifier --version" "buildifier version: 7.3.1 ") || stale_rc=$?
+rm -f "$stale_watch_list"
+[[ $stale_rc -eq 0 ]] || exit 1
+
+#### A watched-file change after seeding still rebuilds ####
+
+corrupt=$(mktemp)
+awk -v f="$build_workspace_directory/MODULE.bazel" '
+  { match($0, /^[^ ]+ +/); p = substr($0, RSTART + RLENGTH); if (p == f) $0 = "0000000000000000000000000000000000000000000000000000000000000000  " f; print }
+' "$lock_file" > "$corrupt" && mv "$corrupt" "$lock_file"
+assert_cmd_output "buildifier --version" "Detected changes in watched files, rebuilding bazel_env..."
 
 #### Tools ####
 
@@ -463,6 +593,31 @@ if [[ "$(cat "$observation_file")" != "absent" ]]; then
   echo "Expected the launcher to delete $all_tools_out before invoking bazel, but it still existed"
   exit 1
 fi
+
+#### Missing lock_lib.sh triggers a rebuild ####
+
+# A cache cleaner may delete lock_lib.sh from a tool's runfiles.
+lock_lib_link="$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/tools/buildifier.runfiles/bazel_env.bzl${BAZEL_REPO_NAME_SEPARATOR}/lock_lib.sh"
+[[ -e "$lock_lib_link" ]] || { echo "lock_lib.sh not found in buildifier's runfiles"; exit 1; }
+mv "$lock_lib_link" "$lock_lib_link.bak"
+# Also make the lock stale.
+rm -f "$build_workspace_directory/bazel_env.lock"
+missing_lib_output=$(env \
+    -u TEST_SRCDIR \
+    -u RUNFILES_DIR \
+    -u RUNFILES_MANIFEST_FILE \
+    FAKE_BAZEL_RESTORE_FROM="$lock_lib_link.bak" \
+    FAKE_BAZEL_RESTORE_TO="$lock_lib_link" \
+    BAZEL=./fake_bazel.sh \
+    PATH="$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/bin:/bin:/usr/bin" \
+    buildifier --version 2>&1) || missing_lib_rc=$?
+# Restore before asserting so that a failure doesn't break the output base.
+[[ -e "$lock_lib_link" ]] || mv "$lock_lib_link.bak" "$lock_lib_link"
+[[ -z "${missing_lib_rc:-}" ]] || { echo "buildifier failed without lock_lib.sh:"; echo "$missing_lib_output"; exit 1; }
+assert_contains "Detected changes in watched files, rebuilding bazel_env..." "$missing_lib_output"
+assert_contains "buildifier version: 7.3.1" "$missing_lib_output"
+# No second rebuild.
+assert_cmd_output "buildifier --version" "buildifier version: 7.3.1 "
 
 #### Auto-rebuild repoints the package-scoped symlink ####
 

@@ -329,7 +329,7 @@ def _tool_impl(ctx):
     sha256sum = ctx.attr._sha256sum[0][_Sha256sumInfo]
 
     runfiles = runfiles.merge(sha256sum.default_runfiles)
-    runfiles = runfiles.merge(ctx.runfiles([ctx.file._lock_lib]))
+    runfiles = runfiles.merge(ctx.runfiles([ctx.file._lock_lib] + ctx.files.watch_lists))
 
     # Path of the helper action output of the bazel_env target (see
     # _bazel_env_rule_impl) relative to the directory containing the launcher.
@@ -360,6 +360,7 @@ def _tool_impl(ctx):
             "{{rlocation_path}}": rlocation_path,
             "{{sha256sum_rlocation_path}}": _rlocation_path(ctx, sha256sum.executable),
             "{{lock_lib_rlocation_path}}": _rlocation_path(ctx, ctx.file._lock_lib),
+            "{{watch_list_rlocation_paths}}": "\n".join([_rlocation_path(ctx, f) for f in ctx.files.watch_lists]),
             "{{extra_env}}": "\n".join([
                 "export {}={}".format(k, repr(v))
                 for k, v in extra_env.items()
@@ -390,6 +391,8 @@ _tool = rule(
         ),
         "path": attr.string(),
         "raw_tool": attr.string(),
+        # Via runfiles to ignore stale lists in bazel-out.
+        "watch_lists": attr.label_list(allow_files = True),
         "toolchain_targets": attr.label_list(
             cfg = _flip_output_dir,
             aspects = [_extract_toolchain_info],
@@ -824,6 +827,7 @@ def bazel_env(*, name, tools = {}, toolchains = {}, watch_dirs = {}, watch_files
         tool_dirs.append(_write_watch_dirs(name, common, watch_dirs[common]))
     if common in watch_files:
         tool_files.append(_write_watch_files(name, common, watch_files[common]))
+    common_watch_lists = tool_dirs + tool_files
 
     for tool_name, tool in tools.items():
         if not tool_name:
@@ -841,20 +845,27 @@ def bazel_env(*, name, tools = {}, toolchains = {}, watch_dirs = {}, watch_files
         else:
             tool_kwargs["target"] = tool
 
+        tool_watch_lists = list(common_watch_lists)
+        if tool_name in watch_dirs:
+            tool_watch_list = _write_watch_dirs(name, tool_name, watch_dirs[tool_name])
+            tool_dirs.append(tool_watch_list)
+            tool_watch_lists.append(tool_watch_list)
+        if tool_name in watch_files:
+            tool_watch_list = _write_watch_files(name, tool_name, watch_files[tool_name])
+            tool_files.append(tool_watch_list)
+            tool_watch_lists.append(tool_watch_list)
+
         tool_target_name = name + "/tools/" + tool_name
         tool_targets.append(tool_target_name)
         _tool(
             name = tool_target_name,
             raw_tool = str(tool),
             toolchain_targets = toolchain_info_targets,
+            watch_lists = [":" + l for l in tool_watch_lists],
             visibility = ["//visibility:private"],
             tags = ["manual"],
             **tool_kwargs
         )
-        if tool_name in watch_dirs:
-            tool_dirs.append(_write_watch_dirs(name, tool_name, watch_dirs[tool_name]))
-        if tool_name in watch_files:
-            tool_files.append(_write_watch_files(name, tool_name, watch_files[tool_name]))
 
     _bazel_env_rule(
         name = name,

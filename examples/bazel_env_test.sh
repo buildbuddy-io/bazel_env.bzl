@@ -321,7 +321,15 @@ BAZEL_ENV_BIN_DIR="$build_workspace_directory/bazel-out/bazel_env-opt/bin/nested
   assert_cmd_output "hello" "hello"
 
 #### Seed suppresses the first-use rebuild ####
-assert_cmd_output "buildifier --version" "buildifier version: 7.3.1 "
+
+# Launchers ignore stale watch lists left in bazel-out.
+stale_watch_list="$build_workspace_directory/bazel-out/bazel_env-opt/bin/bazel_env/tools/__common_watch_dirs.txt"
+[[ ! -e "$stale_watch_list" ]] || { echo "Unexpected $stale_watch_list"; exit 1; }
+echo " nested " > "$stale_watch_list"
+stale_rc=0
+(assert_cmd_output "buildifier --version" "buildifier version: 7.3.1 ") || stale_rc=$?
+rm -f "$stale_watch_list"
+[[ $stale_rc -eq 0 ]] || exit 1
 
 #### A watched-file change after seeding still rebuilds ####
 

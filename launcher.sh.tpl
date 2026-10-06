@@ -60,7 +60,6 @@ case "${BASH_SOURCE[0]}" in
   *) own_path="$PWD/${BASH_SOURCE[0]}" ;;
 esac
 own_dir="$(dirname "$own_path")"
-own_name="$(basename "$own_path")"
 
 workspace_path="$(_bazel__get_workspace_path)"
 source_workspace_path="$(_bazel__get_source_workspace_path "$own_path")"
@@ -74,17 +73,24 @@ watch_base="${source_workspace_path:-$workspace_path}"
 rebuild_env=False
 sha256_cmd="${own_path}.runfiles/{{sha256sum_rlocation_path}}"
 
+# Fills files_to_watch from runfiles.
+bazel_env_collect_launcher_watch_files() {
+  local watch_lists=() _rel _watch_file
+  while IFS= read -r _rel; do
+    [[ -n "$_rel" ]] && watch_lists+=("${own_path}.runfiles/$_rel")
+  done < <(printf '%s\n' '{{watch_list_rlocation_paths}}')
+  files_to_watch=()
+  [[ ${#watch_lists[@]} -gt 0 ]] || return 0
+  while IFS= read -r _watch_file; do
+    files_to_watch+=("$_watch_file")
+  done < <(bazel_env_collect_watch_files "$watch_base" "${watch_lists[@]}")
+}
+
 # Incomplete runfiles count as stale, so the rebuild repairs them.
 # Check first: bash 3.2 exits on a failed source even under 'if'.
 lock_lib="${own_path}.runfiles/{{lock_lib_rlocation_path}}"
 if [[ -f "$lock_lib" ]] && source "$lock_lib"; then
-  while IFS= read -r _watch_file; do
-    files_to_watch+=("$_watch_file")
-  done < <(bazel_env_collect_watch_files "$watch_base" \
-    "${own_dir}/__common_watch_dirs.txt" \
-    "${own_dir}/__common_watch_files.txt" \
-    "${own_dir}/_${own_name}_watch_dirs.txt" \
-    "${own_dir}/_${own_name}_watch_files.txt")
+  bazel_env_collect_launcher_watch_files
 else
   rebuild_env=True
 fi

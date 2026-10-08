@@ -209,12 +209,46 @@ export JS_BINARY__NO_CD_BINDIR=1
 export JS_BINARY__PATCH_NODE_FS=0
 # Environment of the executable target or of the toolchain providing the tool.
 {{extra_env}}
+
+# Fails unless the Xcode with the given developer directory has the given
+# version in one of the forms Bazel's xcode-locator accepts: X, X.Y, X.Y.Z,
+# X.Y.Z.<build> or <build>.
+_bazel__check_xcode_version() {
+  local developer_dir="$1"
+  local requested_version="$2"
+  local version_plist="$developer_dir/../version.plist"
+  local version build
+  version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$version_plist" 2>/dev/null)" || version=""
+  build="$(/usr/libexec/PlistBuddy -c 'Print :ProductBuildVersion' "$version_plist" 2>/dev/null)" || build=""
+  # Expand the version to three components, as xcode-locator does.
+  case "$version" in
+    "" | *.*.*) ;;
+    *.*) version="$version.0" ;;
+    *) version="$version.0.0" ;;
+  esac
+  local full_version="$version${build:+.$build}"
+  if [[ -n "$version" ]] && [[ "$requested_version" == "$build" || "$full_version" == "$requested_version" || "$full_version" == "$requested_version".* ]]; then
+    return
+  fi
+  echo "Bazel builds with Xcode $requested_version, but the Xcode selected via xcode-select at $developer_dir has version ${full_version:-unknown}." >&2
+  echo "Select a matching Xcode with 'sudo xcode-select --switch <path>' or set DEVELOPER_DIR." >&2
+  exit 1
+}
+
 # For actions whose environment requests an Xcode version and an Apple SDK, as
 # the Apple C++ toolchain's does, Bazel's local executor derives DEVELOPER_DIR
 # and SDKROOT at execution time. Mirror this so that the toolchain's compiler
 # wrapper, which requires both, also works when invoked directly.
 if [[ -n "${XCODE_VERSION_OVERRIDE:-}" && -z "${DEVELOPER_DIR:-}" ]]; then
-  DEVELOPER_DIR="$(xcode-select --print-path)"
+  if [[ "$XCODE_VERSION_OVERRIDE" == /* ]]; then
+    DEVELOPER_DIR="$XCODE_VERSION_OVERRIDE"
+  else
+    # Unlike Bazel, which locates the Xcode with the requested version, only
+    # use the one selected via xcode-select, but fail if it isn't the Xcode
+    # Bazel builds with.
+    DEVELOPER_DIR="$(xcode-select --print-path)"
+    _bazel__check_xcode_version "$DEVELOPER_DIR" "$XCODE_VERSION_OVERRIDE"
+  fi
   export DEVELOPER_DIR
 fi
 if [[ -n "${APPLE_SDK_PLATFORM:-}" && -z "${SDKROOT:-}" ]]; then

@@ -694,9 +694,7 @@ def bazel_env(*, name, tools = {}, toolchains = {}, watch_dirs = {}, watch_files
         toolchains: A dictionary mapping toolchain names to their targets. The name is used as the
             basename of the toolchain directory in the `toolchains` directory. The directory is
             a symlink to the repository root of the (single) repository containing the toolchain.
-            Only the files of the toolchain target are guaranteed to be present in it: other
-            files of the repository may not exist on disk, e.g., with
-            `--experimental_remote_repo_contents_cache`.
+            Only the files of the toolchain target are guaranteed to be present in it.
 
             With Bazel 9.0.0-pre.20250311.1 and later, toolchain_type targets can be used directly.
             In older versions, use a "resolved" toolchain target such as

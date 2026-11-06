@@ -155,6 +155,7 @@ _flip_output_dir = transition(
 
 _ToolInfo = provider(fields = ["name", "raw_tool"])
 _ToolchainInfo = provider(fields = ["env", "files", "label", "variables"])
+_ToolchainFilesInfo = provider(fields = ["files"])
 _BinaryArgsInfo = provider(fields = ["args"])
 _IsToolchainTypeInfo = provider(fields = [])
 _IsToolchainType = _IsToolchainTypeInfo()
@@ -451,6 +452,9 @@ def _toolchain_impl(ctx):
 
     return [
         DefaultInfo(files = depset([out])),
+        # The symlink action doesn't consume the files it points to, so they are forwarded to the
+        # bazel_env rule, which stages them (see _bazel_env_rule_impl).
+        _ToolchainFilesInfo(files = toolchain_info.files),
     ]
 
 _toolchain = rule(
@@ -503,9 +507,16 @@ def _bazel_env_rule_impl(ctx):
     # substitution in _tool_impl.
     implicit_out = ctx.actions.declare_file(ctx.label.name + "_all_tools")
 
-    # It is not necessary to stage the toolchain files (which are in runfiles) as inputs as their
-    # repos have already been fetched before the toolchain rules were analyzed.
+    # The toolchain directories are symlinks to the roots of external repos, but a fetched repo
+    # isn't necessarily materialized on disk: with --experimental_remote_repo_contents_cache, the
+    # files of a repo that was a remote cache hit are only downloaded when Bazel reads them or a
+    # local action consumes them. Stage the toolchain files as inputs of this local action so that
+    # the toolchain directories don't contain dangling paths.
     transitive_inputs = [toolchain[DefaultInfo].files for toolchain in ctx.attr.toolchain_targets]
+    transitive_inputs += [
+        toolchain[_ToolchainFilesInfo].files
+        for toolchain in ctx.attr.toolchain_targets
+    ]
     direct_inputs = ctx.files.tool_dirs + ctx.files.tool_files
     tools = [tool[DefaultInfo].files_to_run for tool in ctx.attr.tool_targets]
     ctx.actions.run_shell(
@@ -683,6 +694,7 @@ def bazel_env(*, name, tools = {}, toolchains = {}, watch_dirs = {}, watch_files
         toolchains: A dictionary mapping toolchain names to their targets. The name is used as the
             basename of the toolchain directory in the `toolchains` directory. The directory is
             a symlink to the repository root of the (single) repository containing the toolchain.
+            Only the files of the toolchain target are guaranteed to be present in it.
 
             With Bazel 9.0.0-pre.20250311.1 and later, toolchain_type targets can be used directly.
             In older versions, use a "resolved" toolchain target such as
